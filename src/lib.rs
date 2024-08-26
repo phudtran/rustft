@@ -29,14 +29,9 @@ fn rust_ifft(input: Vec<f64>) -> PyResult<Vec<f64>> {
 
     ifft.process(&mut buffer);
 
-    // Normalize the output
+    // Normalize and extract real parts
     let scale = 1.0 / len as f64;
-    buffer.iter_mut().for_each(|x| *x *= scale);
-
-    let result: Vec<f64> = buffer
-        .into_iter()
-        .map(|c| c.re) // We only return the real part for IFFT
-        .collect();
+    let result: Vec<f64> = buffer.into_iter().map(|c| c.re * scale).collect();
 
     Ok(result)
 }
