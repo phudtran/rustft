@@ -8,12 +8,15 @@ fn rust_fft(py: Python, input: &PyArray1<f64>) -> PyResult<Py<PyArray1<Complex<f
     let len = input.len();
     let fft = planner.plan_fft_forward(len);
 
-    let input_slice = input.to_vec().unwrap();
-    let mut buffer: Vec<Complex<f64>> = input_slice.iter().map(|&x| Complex::new(x, 0.0)).collect();
+    let mut buffer: Vec<Complex<f64>> = input
+        .to_vec()?
+        .iter()
+        .map(|&x| Complex::new(x, 0.0))
+        .collect();
     fft.process(&mut buffer);
 
     // Normalize the FFT output
-    let scale = (len as f64).sqrt();
+    let scale = len as f64;
     buffer.iter_mut().for_each(|x| *x /= scale);
 
     // Convert to PyArray
@@ -30,9 +33,8 @@ fn rust_ifft(py: Python, input: &PyArray1<Complex<f64>>) -> PyResult<Py<PyArray1
     let mut buffer = input.to_vec()?;
     ifft.process(&mut buffer);
 
-    // Normalize and extract real parts
-    let scale = (len as f64).sqrt();
-    let result: Vec<f64> = buffer.into_iter().map(|c| c.re / scale).collect();
+    // Extract real parts
+    let result: Vec<f64> = buffer.into_iter().map(|c| c.re).collect();
 
     // Convert to PyArray
     let array = PyArray1::from_vec(py, result);

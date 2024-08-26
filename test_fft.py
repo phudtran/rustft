@@ -11,12 +11,9 @@ def compare_fft_ifft_roundtrip(signal_size, num_trials=100):
     total_pytorch_diff = 0
     total_rust_fft_pytorch_ifft_diff = 0
     total_pytorch_fft_rust_ifft_diff = 0
-
-
     for _ in range(num_trials):
         signal = generate_test_signal(signal_size)
         # ----  round trip tests ---
-        rust_fft_result = rust_fft(signal)
         rust_roundtrip = rust_fft_roundtrip_test(signal)
 
         pytorch_fft_result = torch.fft.fft(torch.from_numpy(signal))
