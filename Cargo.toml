@@ -9,5 +9,8 @@ name = "rustfft_test"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.22.0"
+ndarray = "0.16.1"
+num-complex = "0.4.6"
+numpy = "0.21.0"
+pyo3 = "0.21.0"
 rustfft = { git="https://github.com/ejmahler/RustFFT.git", branch = "master" }

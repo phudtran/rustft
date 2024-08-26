@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import time
-from rustfft_test import rust_fft, rust_ifft
+from rustfft_test import rust_fft, rust_ifft, rust_fft_roundtrip_test
 
 def generate_test_signal(size):
     return np.random.random(size)
@@ -17,31 +17,24 @@ def compare_fft_ifft_roundtrip(signal_size, num_trials=100):
         signal = generate_test_signal(signal_size)
         # ----  round trip tests ---
 
-        # Rust FFT -> IFFT
-        rust_fft_result = np.array(rust_fft(signal))
-        rust_fft_complex = rust_fft_result[::2] + 1j * rust_fft_result[1::2]
-        rust_roundtrip = np.array(rust_ifft(rust_fft_result))
+        rust_fft_result = rust_fft(signal)
+        rust_roundtrip = rust_fft_roundtrip_test(signal)
 
-        # PyTorch FFT -> IFFT
-        torch_signal = torch.from_numpy(signal)
-        pytorch_fft_result = torch.fft.fft(torch_signal)
+        pytorch_fft_result = torch.fft.fft(torch.from_numpy(signal))
         pytorch_roundtrip = torch.fft.ifft(pytorch_fft_result).numpy()
 
-        # PyTorch FFT -> Rust IFFT
         pytorch_fft_result_numpy = pytorch_fft_result.numpy()
-        pytorch_fft_result_flat = np.concatenate((pytorch_fft_result_numpy.real, pytorch_fft_result_numpy.imag))
-        rust_roundtrip_pytorch_fft = np.array(rust_ifft(pytorch_fft_result_flat))
+        rust_roundtrip_pytorch_fft = np.array(rust_ifft(pytorch_fft_result_numpy))
 
-        # Rust FFT -> PyTorch IFFT
-        rust_fft_complex_torch = torch.from_numpy(rust_fft_complex)
-        pytorch_roundtrip_rust_fft = torch.fft.ifft(rust_fft_complex_torch)
+        rust_fft_complex_torch = torch.from_numpy(np.array(rust_fft_result))
+        pytorch_roundtrip_rust_fft = torch.fft.ifft(rust_fft_complex_torch).resolve_conj().numpy()
+
 
         # Compare results to original signal
         rust_diff = np.abs(signal - rust_roundtrip)
         pytorch_diff = np.abs(signal - pytorch_roundtrip)
-        rust_fft_pytorch_ifft_diff = np.abs(signal - pytorch_roundtrip_rust_fft.numpy())
+        rust_fft_pytorch_ifft_diff = np.abs(signal - pytorch_roundtrip_rust_fft)
         pytorch_fft_rust_ifft_diff = np.abs(signal - rust_roundtrip_pytorch_fft)
-
 
         total_rust_diff += np.mean(rust_diff)
         total_pytorch_diff += np.mean(pytorch_diff)
