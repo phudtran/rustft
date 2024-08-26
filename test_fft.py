@@ -24,10 +24,10 @@ def compare_fft_ifft_roundtrip(signal_size, num_trials=100):
         pytorch_roundtrip = torch.fft.ifft(pytorch_fft_result).numpy()
 
         pytorch_fft_result_numpy = pytorch_fft_result.numpy()
-        rust_roundtrip_pytorch_fft = np.array(rust_ifft(pytorch_fft_result_numpy))
+        rust_roundtrip_pytorch_fft = rust_ifft(pytorch_fft_result_numpy)
 
-        rust_fft_complex_torch = torch.from_numpy(np.array(rust_fft_result))
-        pytorch_roundtrip_rust_fft = torch.fft.ifft(rust_fft_complex_torch).resolve_conj().numpy()
+        rust_fft_complex_torch = torch.from_numpy(rust_fft_result)
+        pytorch_roundtrip_rust_fft = torch.fft.ifft(rust_fft_complex_torch).numpy()
 
 
         # Compare results to original signal

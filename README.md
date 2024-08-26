@@ -12,20 +12,21 @@ python3 test_fft.py
 # Results
 
 ```
-Average Rust roundtrip difference: 0.1660183779029597
-Average PyTorch roundtrip difference: 1.1627914739697414e-16
-Average roundtrip difference (Rust FFT -> PyTorch IFFT): 0.003236004506459895
-Average roundtrip difference (PyTorch FFT -> Rust IFFT): 0.0032278275267588826
+Testing with signal size: 1024
+Average Rust roundtrip difference: 1.0572329399064591e-16
+Average PyTorch roundtrip difference: 1.161424297029473e-16
+Average roundtrip difference (Rust FFT -> PyTorch IFFT): 0.004979554027795324
+Average roundtrip difference (PyTorch FFT -> Rust IFFT): 0.15934572888945037
 
 Testing with signal size: 4096
-Average Rust roundtrip difference: 0.16645052851788375
-Average PyTorch roundtrip difference: 1.2828566100614384e-16
-Average roundtrip difference (Rust FFT -> PyTorch IFFT): 0.003158114948556162
-Average roundtrip difference (PyTorch FFT -> Rust IFFT): 0.003098265066608156
+Average Rust roundtrip difference: 1.161745291243513e-16
+Average PyTorch roundtrip difference: 1.2870693382833326e-16
+Average roundtrip difference (Rust FFT -> PyTorch IFFT): 0.004929797466797684
+Average roundtrip difference (PyTorch FFT -> Rust IFFT): 0.3155070378750518
 
 Testing with signal size: 16384
-Average Rust roundtrip difference: 0.16659173069958502
-Average PyTorch roundtrip difference: 1.4374930141859136e-16
-Average roundtrip difference (Rust FFT -> PyTorch IFFT): 0.0031669848694140974
-Average roundtrip difference (PyTorch FFT -> Rust IFFT): 0.0031452365763146774
+Average Rust roundtrip difference: 1.3016321303333657e-16
+Average PyTorch roundtrip difference: 1.460541064760903e-16
+Average roundtrip difference (Rust FFT -> PyTorch IFFT): 0.0049478770226842024
+Average roundtrip difference (PyTorch FFT -> Rust IFFT): 0.6333282589035779
 ```
