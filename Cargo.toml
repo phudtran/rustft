@@ -10,4 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = "0.22.0"
-rustfft = "6.1.0"
+rustfft = { git="https://github.com/ejmahler/RustFFT.git", branch = "master" }

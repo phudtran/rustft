@@ -13,26 +13,26 @@ python3 test_fft.py
 
 ```
 Testing with signal size: 1024
-Average FFT difference: 2.5693190391094394e-15
-Average IFFT difference: 0.290660366452147
-Average time (Rust FFT): 0.000763 seconds
-Average time (Rust IFFT): 0.000606 seconds
-Average time (PyTorch FFT): 0.000049 seconds
-Average time (PyTorch IFFT): 0.000014 seconds
+Average FFT difference: 2.6461929295764306e-15
+Average IFFT difference: 0.29258012610368017
+Average time (Rust FFT): 0.000859 seconds
+Average time (Rust IFFT): 0.000703 seconds
+Average time (PyTorch FFT): 0.000064 seconds
+Average time (PyTorch IFFT): 0.000016 seconds
 
 Testing with signal size: 4096
-Average FFT difference: 6.1521962015234e-15
-Average IFFT difference: 0.290924115634151
-Average time (Rust FFT): 0.002913 seconds
-Average time (Rust IFFT): 0.002374 seconds
-Average time (PyTorch FFT): 0.000020 seconds
-Average time (PyTorch IFFT): 0.000027 seconds
+Average FFT difference: 6.291434261458335e-15
+Average IFFT difference: 0.2916950593071173
+Average time (Rust FFT): 0.003422 seconds
+Average time (Rust IFFT): 0.002953 seconds
+Average time (PyTorch FFT): 0.000023 seconds
+Average time (PyTorch IFFT): 0.000030 seconds
 
 Testing with signal size: 16384
-Average FFT difference: 1.425965644781648e-14
-Average IFFT difference: 0.29147583431463625
-Average time (Rust FFT): 0.012430 seconds
-Average time (Rust IFFT): 0.010305 seconds
-Average time (PyTorch FFT): 0.000088 seconds
-Average time (PyTorch IFFT): 0.000130 seconds
+Average FFT difference: 1.451280174643235e-14
+Average IFFT difference: 0.29141259727761487
+Average time (Rust FFT): 0.014347 seconds
+Average time (Rust IFFT): 0.012194 seconds
+Average time (PyTorch FFT): 0.000089 seconds
+Average time (PyTorch IFFT): 0.000131 seconds
 ```
