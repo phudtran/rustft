@@ -25,7 +25,7 @@ def compare_fft_ifft_roundtrip(signal_size, num_trials=100):
         # PyTorch FFT -> IFFT
         torch_signal = torch.from_numpy(signal)
         pytorch_fft_result = torch.fft.fft(torch_signal)
-        pytorch_roundtrip = torch.fft.ifft(pytorch_fft_result).real.numpy()
+        pytorch_roundtrip = torch.fft.ifft(pytorch_fft_result).numpy()
 
         # PyTorch FFT -> Rust IFFT
         pytorch_fft_result_numpy = pytorch_fft_result.numpy()
@@ -34,12 +34,12 @@ def compare_fft_ifft_roundtrip(signal_size, num_trials=100):
 
         # Rust FFT -> PyTorch IFFT
         rust_fft_complex_torch = torch.from_numpy(rust_fft_complex)
-        pytorch_roundtrip_rust_fft = torch.fft.ifft(rust_fft_complex_torch).real.numpy()
+        pytorch_roundtrip_rust_fft = torch.fft.ifft(rust_fft_complex_torch)
 
         # Compare results to original signal
         rust_diff = np.abs(signal - rust_roundtrip)
         pytorch_diff = np.abs(signal - pytorch_roundtrip)
-        rust_fft_pytorch_ifft_diff = np.abs(signal - pytorch_roundtrip_rust_fft)
+        rust_fft_pytorch_ifft_diff = np.abs(signal - pytorch_roundtrip_rust_fft.numpy())
         pytorch_fft_rust_ifft_diff = np.abs(signal - rust_roundtrip_pytorch_fft)
 
 
