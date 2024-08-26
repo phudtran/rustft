@@ -1,3 +1,16 @@
+# How to run
+
+```
+source ~/.venv/bin/activate
+pip install numpy torch
+cargo build --release
+maturin develop
+python3 test_fft.py
+
+```
+
+# Results
+
 ```
 Testing with signal size: 1024
 Average FFT difference: 2.5693190391094394e-15
