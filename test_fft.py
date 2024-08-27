@@ -44,10 +44,10 @@ def compare_fft_ifft_roundtrip(signal_size, num_trials=100):
     avg_rust_fft_pytorch_ifft_diff = total_rust_fft_pytorch_ifft_diff / num_trials
     avg_pytorch_fft_rust_ifft_diff = total_pytorch_fft_rust_ifft_diff / num_trials
 
-    print(f"Average Rust roundtrip difference: {avg_rust_diff}")
-    print(f"Average PyTorch roundtrip difference: {avg_pytorch_diff}")
-    print(f"Average roundtrip difference (Rust FFT -> PyTorch IFFT): {avg_rust_fft_pytorch_ifft_diff}")
-    print(f"Average roundtrip difference (PyTorch FFT -> Rust IFFT): {avg_pytorch_fft_rust_ifft_diff}")
+    print(f"Average Rust roundtrip error: {avg_rust_diff}")
+    print(f"Average PyTorch roundtrip error: {avg_pytorch_diff}")
+    print(f"Average roundtrip error (Rust FFT -> PyTorch IFFT): {avg_rust_fft_pytorch_ifft_diff}")
+    print(f"Average roundtrip error (PyTorch FFT -> Rust IFFT): {avg_pytorch_fft_rust_ifft_diff}")
 
 if __name__ == "__main__":
     signal_sizes = [1024, 4096, 16384]
