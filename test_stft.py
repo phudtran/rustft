@@ -30,7 +30,8 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
             n_fft,
             hop_length,
             window=window,
-            center=True).numpy()
+            center=True
+            ).numpy()
 
         # Rust STFT -> PyTorch ISTFT
         pytorch_istft_rust_stft = torch.istft(
