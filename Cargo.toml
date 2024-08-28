@@ -7,7 +7,7 @@ resolver = "2"
 
 [workspace.package]
 name = "rustft"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "WIP. STFT and ISTFT in Rust matching PyTorch"
@@ -19,7 +19,7 @@ categories = ["multimedia::audio", "mathematics", "algorithms", "multimedia"]
 keywords = ["audio", "ISTFT", "STFT", "spectrogram", "signal_processing"]
 
 [workspace.dependencies]
-rustft = { path = "./rustft", package = "rustft", version = "0.0.0" }
+rustft = { path = "./rustft", package = "rustft", version = "0.0.3" }
 pyo3 = { path = "./pyo3", package = "pyo3", version = "0.0.0" }
 
 
