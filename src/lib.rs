@@ -54,7 +54,7 @@ fn rust_stft(
     let num_channels = input_array.shape()[0];
     let signal_length = input_array.shape()[1];
 
-    // Apply centering padding
+    // For center padding (reflection)
     let pad_length = n_fft / 2;
     let padded_length = signal_length + 2 * pad_length;
 
@@ -92,7 +92,7 @@ fn rust_stft(
         }
     }
 
-    let py_output = PyArray3::from_owned_array(py, output);
+    let py_output = PyArray3::from_owned_array_bound(py, output);
     Ok(py_output.into())
 }
 
@@ -123,7 +123,6 @@ fn rust_istft(
     input: &PyArray3<Complex<f64>>,
     n_fft: usize,
     hop_length: usize,
-    window: Option<&PyArray1<f64>>,
 ) -> PyResult<Py<PyArray2<f64>>> {
     let input_array = input.readonly().as_array().to_owned();
     let num_channels = input_array.shape()[0];
@@ -131,15 +130,10 @@ fn rust_istft(
     let padded_length = (num_frames - 1) * hop_length + n_fft;
     let mut planner = FftPlanner::new();
     let ifft = planner.plan_fft_inverse(n_fft);
-    let window: Array1<f64> = match window {
-        Some(w) => w.readonly().as_array().to_owned(),
-        None => Array1::from_vec(hann_window(n_fft, true)), // periodic window
-    };
 
     let scale_factor = 1.0 / (n_fft as f64);
 
     let mut output: Array2<f64> = Array2::zeros((num_channels, padded_length));
-    let mut window_sum: Array1<f64> = Array1::zeros(padded_length);
 
     for (ch, channel) in input_array.outer_iter().enumerate() {
         for frame in 0..num_frames {
@@ -158,15 +152,13 @@ fn rust_istft(
                     full_spectrum[n_fft - i] = value.conj();
                 }
             }
-
             // Perform IFFT
             ifft.process(&mut full_spectrum);
 
-            // Apply window and accumulate
+            // Accumulate
             for (i, &value) in full_spectrum.iter().enumerate() {
                 if start + i < padded_length {
                     output[[ch, start + i]] += value.re * scale_factor;
-                    window_sum[start + i] += window[i];
                 }
             }
         }
@@ -183,14 +175,14 @@ fn remove_padding(padded: &mut Array2<f64>, n_fft: usize) {
     let start = n_fft / 2;
     let end = padded_length - n_fft / 2;
 
-    // Move the data in place, removing front padding
+    // Removing front padding
     for ch in 0..num_channels {
         for i in 0..(end - start) {
             padded[[ch, i]] = padded[[ch, i + start]];
         }
     }
 
-    // Truncate the array, effectively removing end padding
+    // Truncate
     padded.slice_collapse(s![.., ..(end - start)]);
 }
 
@@ -220,7 +212,7 @@ fn rust_stft_roundtrip(
     hop_length: usize,
 ) -> PyResult<Py<PyArray2<f64>>> {
     let stft_result = rust_stft(py, input, n_fft, hop_length, None)?;
-    let istft_result = rust_istft(py, &stft_result.as_ref(py), n_fft, hop_length, None)?;
+    let istft_result = rust_istft(py, &stft_result.as_ref(py), n_fft, hop_length)?;
     Ok(istft_result)
 }
 
