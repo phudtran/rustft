@@ -16,7 +16,7 @@ name = "rustft"
 crate-type = ["cdylib"]
 
 [dependencies]
-stft = { path = "../rustft", package = "rustft", version = "0.0.1" }
+rustft = "0.0.1"
 num-complex = "0.4.6"
 numpy = "0.21.0"
 pyo3 = "0.21.0"

@@ -326,6 +326,17 @@ dependencies = [
 [[package]]
 name = "rustft"
 version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "733f5445005e8f4523ad1dfe0ab555ae0726c556e6d7cca02425c37f202fc74f"
+dependencies = [
+ "log",
+ "ndarray 0.15.6",
+ "rustfft",
+]
+
+[[package]]
+name = "rustft"
+version = "0.0.2"
 dependencies = [
  "log",
  "ndarray 0.16.1",
@@ -334,12 +345,12 @@ dependencies = [
 
 [[package]]
 name = "rustft-pyo3"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "num-complex",
  "numpy",
  "pyo3",
- "rustft",
+ "rustft 0.0.1",
 ]
 
 [[package]]

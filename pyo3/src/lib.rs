@@ -1,6 +1,7 @@
 use num_complex::Complex;
 use numpy::{PyArray1, PyArray2, PyArray3};
 use pyo3::prelude::*;
+extern crate rustft as stft;
 use stft::{fft, ifft, istft, stft};
 
 #[pyfunction]
