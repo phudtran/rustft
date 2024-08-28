@@ -17,9 +17,7 @@ python3 test_stft.py
 
 ```
 
-# Results
-
-### STFT/ISTFT
+# Benchmarks
 
 ```
 Testing with: 2 channels, signal length 16384, n_fft 1024, hop_length 512

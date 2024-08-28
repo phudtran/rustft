@@ -1,11 +1,20 @@
 [package]
-name = "rustfft_test"
-version = "0.1.0"
+name = "rustft"
+version = "0.0.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "STFT and ISTFT in Rust matching PyTorch's accuracy. WIP"
+readme = "README.md"
+homepage = "https://github.com/phudtran/rustft"
+repository = "https://github.com/phudtran/rustft"
+
+categories = ["multimedia::audio", "mathematics", "algorithms", "multimedia"]
+
+keywords = ["audio", "ISTFT", "STFT", "spectrogram", "signal_processing"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "rustfft_test"
+name = "rustft"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -13,4 +22,4 @@ ndarray = "0.16.1"
 num-complex = "0.4.6"
 numpy = "0.21.0"
 pyo3 = "0.21.0"
-rustfft = { git="https://github.com/ejmahler/RustFFT.git", branch = "master" }
+rustfft = "6.2.0"
