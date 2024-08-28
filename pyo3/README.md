@@ -1,6 +1,9 @@
-# WIP STFT/ISTFT Library
+# Pyo3 bindings
 
-Goal to get outputs in line with PyTorch.
+# WIP
+
+Currently broken until
+https://github.com/PyO3/rust-numpy/pull/439 is merged
 
 # Performance
 
