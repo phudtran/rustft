@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from rustfft_test import rust_stft, rust_istft
+from rustfft_test import rust_stft, rust_istft, rust_stft_roundtrip
 
 def generate_test_signal(num_channels, signal_length):
     return np.random.random((num_channels, signal_length))
@@ -15,8 +15,7 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
         signal = generate_test_signal(num_channels, signal_length)
 
         # Rust STFT -> ISTFT
-        rust_stft_result = rust_stft(signal, n_fft, hop_length, None)
-        rust_roundtrip = rust_istft(rust_stft_result,n_fft, hop_length, signal_length)
+        rust_roundtrip = rust_stft_roundtrip(signal, n_fft, hop_length)
 
         # PyTorch STFT -> ISTFT
         pytorch_stft_result = torch.stft(
@@ -34,6 +33,7 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
             ).numpy()
 
         # Rust STFT -> PyTorch ISTFT
+        rust_stft_result = rust_stft(signal, n_fft, hop_length, None)
         pytorch_istft_rust_stft = torch.istft(
             torch.from_numpy(rust_stft_result),
             n_fft,
@@ -47,7 +47,6 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
             pytorch_stft_result.numpy(),
             n_fft,
             hop_length,
-            signal_length,
             None)
 
         # Compare results to original signal

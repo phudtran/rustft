@@ -16,8 +16,8 @@ fn rust_fft(py: Python, input: &PyArray1<f64>) -> PyResult<Py<PyArray1<Complex<f
         .collect();
     fft.process(&mut buffer);
     // Convert to PyArray without normalization
-    let array = PyArray1::from_vec(py, buffer);
-    Ok(array.to_owned())
+    let array = PyArray1::from_vec_bound(py, buffer);
+    Ok(array.into())
 }
 
 #[pyfunction]
@@ -31,8 +31,8 @@ fn rust_ifft(py: Python, input: &PyArray1<Complex<f64>>) -> PyResult<Py<PyArray1
     let scale = len as f64;
     let result: Vec<f64> = buffer.into_iter().map(|c| c.re / scale).collect();
     // Convert to PyArray
-    let array = PyArray1::from_vec(py, result);
-    Ok(array.to_owned())
+    let array = PyArray1::from_vec_bound(py, result);
+    Ok(array.into())
 }
 
 #[pyfunction]
@@ -67,32 +67,24 @@ fn rust_stft(
 
     let window: Array1<f64> = match window {
         Some(w) => w.readonly().as_array().to_owned(),
-        None => Array1::from_vec(hann_window(n_fft, true)), // Changed to true for periodic window
+        None => Array1::from_vec(hann_window(n_fft, true)),
     };
 
     let mut output = Array3::zeros((num_channels, n_freqs, num_frames));
 
     for (ch, channel) in input_array.outer_iter().enumerate() {
+        // Pad the entire channel once
+        let padded_channel = pad_reflect(channel.to_owned(), pad_length);
+
         for frame in 0..num_frames {
             let start = frame * hop_length;
-            let mut buffer = vec![Complex::new(0.0, 0.0); n_fft];
+            let mut buffer = Array1::zeros(n_fft);
 
             for i in 0..n_fft {
-                let padded_index = start + i;
-                if padded_index < pad_length {
-                    buffer[i] =
-                        Complex::new(-channel[pad_length - padded_index - 1] * window[i], 0.0);
-                } else if padded_index >= pad_length && padded_index < pad_length + signal_length {
-                    buffer[i] = Complex::new(channel[padded_index - pad_length] * window[i], 0.0);
-                } else {
-                    buffer[i] = Complex::new(
-                        -channel[2 * signal_length - (padded_index - pad_length) - 1] * window[i],
-                        0.0,
-                    );
-                }
+                buffer[i] = Complex::new(padded_channel[start + i] * window[i], 0.0);
             }
 
-            fft.process(&mut buffer);
+            fft.process(buffer.as_slice_mut().unwrap());
 
             for (freq, &value) in buffer.iter().take(n_freqs).enumerate() {
                 output[[ch, freq, frame]] = value;
@@ -100,10 +92,29 @@ fn rust_stft(
         }
     }
 
-    output.mapv_inplace(|x| x);
-
     let py_output = PyArray3::from_owned_array(py, output);
-    Ok(py_output.to_owned())
+    Ok(py_output.into())
+}
+
+fn pad_reflect(signal: Array1<f64>, pad_length: usize) -> Array1<f64> {
+    let signal_length = signal.len();
+    let mut padded = Array1::zeros(signal_length + 2 * pad_length);
+
+    // Copy the original signal
+    padded
+        .slice_mut(s![pad_length..pad_length + signal_length])
+        .assign(&signal);
+
+    // Reflect at the beginning
+    for i in 0..pad_length {
+        padded[pad_length - 1 - i] = signal[i + 1];
+    }
+
+    // Reflect at the end
+    for i in 0..pad_length {
+        padded[pad_length + signal_length + i] = signal[signal_length - 2 - i];
+    }
+    padded
 }
 
 #[pyfunction]
@@ -112,71 +123,75 @@ fn rust_istft(
     input: &PyArray3<Complex<f64>>,
     n_fft: usize,
     hop_length: usize,
-    original_length: usize,
     window: Option<&PyArray1<f64>>,
 ) -> PyResult<Py<PyArray2<f64>>> {
     let input_array = input.readonly().as_array().to_owned();
     let num_channels = input_array.shape()[0];
     let num_frames = input_array.shape()[2];
-    let pad_length = n_fft / 2;
     let padded_length = (num_frames - 1) * hop_length + n_fft;
     let mut planner = FftPlanner::new();
     let ifft = planner.plan_fft_inverse(n_fft);
     let window: Array1<f64> = match window {
         Some(w) => w.readonly().as_array().to_owned(),
-        None => Array1::from_vec(hann_window(n_fft, true)), // non-periodic window
+        None => Array1::from_vec(hann_window(n_fft, true)), // periodic window
     };
+
+    let scale_factor = 1.0 / (n_fft as f64);
+
     let mut output: Array2<f64> = Array2::zeros((num_channels, padded_length));
     let mut window_sum: Array1<f64> = Array1::zeros(padded_length);
+
     for (ch, channel) in input_array.outer_iter().enumerate() {
         for frame in 0..num_frames {
             let start = frame * hop_length;
             let mut full_spectrum = vec![Complex::new(0.0, 0.0); n_fft];
+
+            // Reconstruct full spectrum with correct Nyquist handling
             for (i, &value) in channel.slice(s![.., frame]).iter().enumerate() {
-                full_spectrum[i] = value;
-                if i > 0 && i < n_fft / 2 {
+                if i == 0 || i == n_fft / 2 {
+                    // DC and Nyquist components are always real
+                    full_spectrum[i] = Complex::new(value.re, 0.0);
+                } else if i < n_fft / 2 {
+                    // Positive frequencies
+                    full_spectrum[i] = value;
+                    // Negative frequencies (complex conjugate)
                     full_spectrum[n_fft - i] = value.conj();
                 }
             }
+
+            // Perform IFFT
             ifft.process(&mut full_spectrum);
+
+            // Apply window and accumulate
             for (i, &value) in full_spectrum.iter().enumerate() {
                 if start + i < padded_length {
-                    output[[ch, start + i]] += value.re * window[i];
-                    window_sum[start + i] += window[i].powi(2);
+                    output[[ch, start + i]] += value.re * scale_factor;
+                    window_sum[start + i] += window[i];
                 }
             }
         }
     }
-    // Normalize by the window sum
-    for mut channel in output.outer_iter_mut() {
-        for (i, sample) in channel.iter_mut().enumerate() {
-            if window_sum[i] > 1e-8 {
-                *sample /= window_sum[i];
-            }
-        }
-    }
-    // Apply center padding reversal
-    let mut final_output = Array2::zeros((num_channels, original_length));
-    for (ch, channel) in output.outer_iter().enumerate() {
-        for i in 0..original_length {
-            let padded_index = i + pad_length;
-            if padded_index < pad_length {
-                final_output[[ch, i]] = -channel[pad_length - padded_index - 1];
-            } else if padded_index >= pad_length && padded_index < pad_length + original_length {
-                final_output[[ch, i]] = channel[padded_index];
-            } else {
-                final_output[[ch, i]] =
-                    -channel[2 * original_length - (padded_index - pad_length) - 1];
-            }
+    // Remove padding
+    remove_padding(&mut output, n_fft);
+
+    let py_output = PyArray2::from_owned_array_bound(py, output);
+    Ok(py_output.into())
+}
+
+fn remove_padding(padded: &mut Array2<f64>, n_fft: usize) {
+    let (num_channels, padded_length) = padded.dim();
+    let start = n_fft / 2;
+    let end = padded_length - n_fft / 2;
+
+    // Move the data in place, removing front padding
+    for ch in 0..num_channels {
+        for i in 0..(end - start) {
+            padded[[ch, i]] = padded[[ch, i + start]];
         }
     }
 
-    // Apply scaling factor
-
-    let scaling_factor = 1.0 / (hop_length as f64);
-    final_output.mapv_inplace(|x| x * scaling_factor);
-    let py_output = PyArray2::from_owned_array(py, final_output);
-    Ok(py_output.to_owned())
+    // Truncate the array, effectively removing end padding
+    padded.slice_collapse(s![.., ..(end - start)]);
 }
 
 fn hann_window(size: usize, periodic: bool) -> Vec<f64> {
@@ -198,21 +213,14 @@ fn hann_window(size: usize, periodic: bool) -> Vec<f64> {
 }
 
 #[pyfunction]
-fn rust_stft_roundtrip_test(
+fn rust_stft_roundtrip(
     py: Python,
     input: &PyArray2<f64>,
     n_fft: usize,
     hop_length: usize,
 ) -> PyResult<Py<PyArray2<f64>>> {
     let stft_result = rust_stft(py, input, n_fft, hop_length, None)?;
-    let istft_result = rust_istft(
-        py,
-        &stft_result.as_ref(py),
-        n_fft,
-        hop_length,
-        input.len(),
-        None,
-    )?;
+    let istft_result = rust_istft(py, &stft_result.as_ref(py), n_fft, hop_length, None)?;
     Ok(istft_result)
 }
 
@@ -223,6 +231,34 @@ fn rustfft_test(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rust_fft_roundtrip_test, m)?)?;
     m.add_function(wrap_pyfunction!(rust_stft, m)?)?;
     m.add_function(wrap_pyfunction!(rust_istft, m)?)?;
-    m.add_function(wrap_pyfunction!(rust_stft_roundtrip_test, m)?)?;
+    m.add_function(wrap_pyfunction!(rust_stft_roundtrip, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use numpy::ndarray::{arr1, arr2};
+
+    #[test]
+    fn test_reverse_padding_multi_channel() {
+        let mut padded = arr2(&[
+            [3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 3.0, 2.0],
+            [8.0, 7.0, 6.0, 7.0, 8.0, 9.0, 8.0, 7.0],
+        ]);
+
+        let n_fft = 4;
+        remove_padding(&mut padded, n_fft);
+        let expected = arr2(&[[1.0, 2.0, 3.0, 4.0], [6.0, 7.0, 8.0, 9.0]]);
+        assert_eq!(padded, expected);
+    }
+
+    #[test]
+    fn test_apply_padding() {
+        let signal = arr1(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let pad_length = 2;
+        let padded = pad_reflect(signal, pad_length);
+        let expected = arr1(&[3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0]);
+        assert_eq!(padded, expected);
+    }
 }

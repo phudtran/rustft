@@ -37,20 +37,20 @@ Average roundtrip error (PyTorch FFT -> Rust IFFT): 1.3041009577432653e-16
 
 ```
 Testing with: 2 channels, signal length 16384, n_fft 1024, hop_length 512
-Average Rust roundtrip error: 1.0804457850576575e-16
-Average PyTorch roundtrip error: 1.4826852848950367e-08
-Average roundtrip error (Rust STFT -> PyTorch ISTFT): 2.7412625609263545e-08
-Average roundtrip error (PyTorch STFT -> Rust ISTFT): 2.273012613578353e-08
+Average Rust roundtrip error: 1.2212620315865524e-16
+Average PyTorch roundtrip error: 1.4837952538699314e-08
+Average roundtrip error (Rust STFT -> PyTorch ISTFT): 2.7440729675987194e-08
+Average roundtrip error (PyTorch STFT -> Rust ISTFT): 2.3913267791699815e-08
 
 Testing with: 4 channels, signal length 32768, n_fft 2048, hop_length 1024
-Average Rust roundtrip error: 0.24998884648421238
-Average PyTorch roundtrip error: 1.511156196794707e-08
-Average roundtrip error (Rust STFT -> PyTorch ISTFT): 2.7479478628299385e-08
-Average roundtrip error (PyTorch STFT -> Rust ISTFT): 0.24998885050404357
+Average Rust roundtrip error: 1.3065983010208806e-16
+Average PyTorch roundtrip error: 1.512578372054614e-08
+Average roundtrip error (Rust STFT -> PyTorch ISTFT): 2.748768061541098e-08
+Average roundtrip error (PyTorch STFT -> Rust ISTFT): 2.3581271973187485e-08
 
 Testing with: 8 channels, signal length 65536, n_fft 4096, hop_length 2048
-Average Rust roundtrip error: 0.37505129583172775
-Average PyTorch roundtrip error: 1.514057545556388e-08
-Average roundtrip error (Rust STFT -> PyTorch ISTFT): 2.727195581803125e-08
-Average roundtrip error (PyTorch STFT -> Rust ISTFT): 0.37505129786651914
+Average Rust roundtrip error: 1.3603665065911794e-16
+Average PyTorch roundtrip error: 1.5145468637916555e-08
+Average roundtrip error (Rust STFT -> PyTorch ISTFT): 2.7275045036375018e-08
+Average roundtrip error (PyTorch STFT -> Rust ISTFT): 2.361479677357514e-08
 ```
