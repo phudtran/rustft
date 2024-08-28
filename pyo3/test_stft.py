@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from rustfft_test import rust_stft, rust_istft, rust_stft_roundtrip
+from rustft import rust_stft, rust_istft, rust_stft_roundtrip
 import time
 
 def generate_test_signal(num_channels, signal_length, sample_rate=44100):

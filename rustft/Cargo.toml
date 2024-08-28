@@ -1,0 +1,20 @@
+[package]
+name = "rustft"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "rustft"
+
+
+[dependencies]
+log = "0.4.22"
+ndarray = ">= 0.13, < 0.16"
+rustfft = "6.2.0"

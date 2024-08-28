@@ -2,12 +2,6 @@
 
 Goal to get outputs in line with PyTorch.
 
-# Install
-
-```
-cargo add rustft
-```
-
 # Performance
 
 WIP. No optimizations, super slow.
@@ -15,7 +9,6 @@ WIP. No optimizations, super slow.
 # How to run test
 
 ```
-cd pyo3
 source ~/.venv/bin/activate
 pip install numpy torch
 cargo build --release

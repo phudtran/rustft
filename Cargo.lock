@@ -49,6 +49,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "log"
+version = "0.4.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
 name = "matrixmultiply"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -309,13 +315,22 @@ dependencies = [
 
 [[package]]
 name = "rustft"
-version = "0.0.0"
+version = "0.0.1"
+dependencies = [
+ "log",
+ "ndarray 0.15.6",
+ "rustfft",
+]
+
+[[package]]
+name = "rustft-pyo3"
+version = "0.0.1"
 dependencies = [
  "ndarray 0.16.1",
  "num-complex",
  "numpy",
  "pyo3",
- "rustfft",
+ "rustft",
 ]
 
 [[package]]

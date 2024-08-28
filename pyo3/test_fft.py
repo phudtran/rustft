@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from rustfft_test import rust_fft, rust_ifft, rust_fft_roundtrip_test
+from rustft import rust_fft, rust_ifft, rust_fft_roundtrip_test
 
 def generate_test_signal(size):
     return np.random.random(size)
