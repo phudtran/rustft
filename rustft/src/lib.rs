@@ -41,7 +41,7 @@ pub fn stft<T>(
     window: Option<Array1<T>>,
 ) -> Result<Array3<Complex<T>>, String>
 where
-    T: Float + FftNum,
+    T: Float + FftNum + ndarray::ScalarOperand,
 {
     let num_channels = input.shape()[0];
     let signal_length = input.shape()[1];
@@ -95,16 +95,24 @@ pub fn istft<T>(
     window: Option<Array1<T>>,
 ) -> Result<Array2<T>, String>
 where
-    T: Float + FftNum,
+    T: Float + FftNum + ndarray::ScalarOperand,
 {
     let num_channels = input.shape()[0];
     let num_frames = input.shape()[2];
     let original_length = (num_frames - 1) * hop_length + n_fft;
     let mut planner = FftPlanner::new();
     let ifft = planner.plan_fft_inverse(n_fft);
+
     let window: Array1<T> = match window {
-        Some(w) => w,
-        None => Array1::from_vec(hann_window(n_fft, true)),
+        Some(w) => {
+            let norm_factor = w.mapv(|x: T| x.powi(2)).sum().sqrt();
+            w / norm_factor
+        }
+        None => {
+            let w = Array1::from_vec(hann_window(n_fft, true));
+            let norm_factor = w.mapv(|x: T| x.powi(2)).sum().sqrt();
+            w / norm_factor
+        }
     };
 
     let scale_factor = T::from(1.0 / (n_fft as f64)).unwrap();
