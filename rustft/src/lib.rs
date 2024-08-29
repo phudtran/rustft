@@ -1,10 +1,10 @@
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3};
-use rustfft::{num_complex::Complex, num_traits::Float, FftPlanner};
+use rustfft::{num_complex::Complex, num_traits::Float, FftNum, FftPlanner};
 use std::f64::consts::PI;
 
 pub fn fft<T>(input: ArrayView1<T>) -> Result<Array1<Complex<T>>, String>
 where
-    T: Float + rustfft::FftNum,
+    T: Float + FftNum,
 {
     let mut planner = FftPlanner::new();
     let len = input.len();
@@ -21,7 +21,7 @@ where
 
 pub fn ifft<T>(input: ArrayView1<Complex<T>>) -> Result<Array1<T>, String>
 where
-    T: Float + rustfft::FftNum,
+    T: Float + FftNum,
 {
     let mut planner = FftPlanner::new();
     let len = input.len();
@@ -41,7 +41,7 @@ pub fn stft<T>(
     window: Option<Array1<T>>,
 ) -> Result<Array3<Complex<T>>, String>
 where
-    T: Float + rustfft::FftNum,
+    T: Float + FftNum,
 {
     let num_channels = input.shape()[0];
     let signal_length = input.shape()[1];
@@ -63,32 +63,28 @@ where
     };
 
     let mut output = Array3::zeros((num_channels, n_freqs, num_frames));
-
+    let mut buffer = Array1::zeros(n_fft);
     for (ch, channel) in input.outer_iter().enumerate() {
         // Pad the entire channel once
         let padded_channel = pad_reflect(channel.to_owned(), pad_length);
 
         for frame in 0..num_frames {
             let start = frame * hop_length;
-            let mut buffer = Array1::zeros(n_fft);
 
             for i in 0..n_fft {
-                buffer[i] =
-                    Complex::new(padded_channel[start + i] * window[i], T::from(0.0).unwrap());
+                buffer[i] = Complex::new(padded_channel[start + i] * window[i], T::zero());
             }
 
-            fft.process(
-                buffer
-                    .as_slice_mut()
-                    .expect("Failed to get mutable slice of buffer"),
-            );
+            fft.process(match buffer.as_slice_mut() {
+                Some(slice) => slice,
+                None => return Err("Failed to get mutable slice".to_string()),
+            });
 
             for (freq, &value) in buffer.iter().take(n_freqs).enumerate() {
                 output[[ch, freq, frame]] = value;
             }
         }
     }
-
     Ok(output)
 }
 
@@ -96,23 +92,28 @@ pub fn istft<T>(
     input: ArrayView3<Complex<T>>,
     n_fft: usize,
     hop_length: usize,
+    window: Option<Array1<T>>,
 ) -> Result<Array2<T>, String>
 where
-    T: Float + rustfft::FftNum,
+    T: Float + FftNum,
 {
     let num_channels = input.shape()[0];
     let num_frames = input.shape()[2];
-    let padded_length = (num_frames - 1) * hop_length + n_fft;
+    let original_length = (num_frames - 1) * hop_length + n_fft;
     let mut planner = FftPlanner::new();
     let ifft = planner.plan_fft_inverse(n_fft);
+    let window: Array1<T> = match window {
+        Some(w) => w,
+        None => Array1::from_vec(hann_window(n_fft, true)),
+    };
 
     let scale_factor = T::from(1.0 / (n_fft as f64)).unwrap();
-
-    let mut output: Array2<T> = Array2::zeros((num_channels, padded_length));
-
+    let mut output: Array2<T> = Array2::zeros((num_channels, original_length));
+    let window_norm = window.dot(&window);
     for (ch, channel) in input.outer_iter().enumerate() {
         for frame in 0..num_frames {
             let start = frame * hop_length;
+
             let mut full_spectrum = vec![Complex::new(T::zero(), T::zero()); n_fft];
 
             // Reconstruct full spectrum with correct Nyquist handling
@@ -127,18 +128,19 @@ where
                     full_spectrum[n_fft - i] = value.conj();
                 }
             }
-            // Perform IFFT
+
             ifft.process(&mut full_spectrum);
 
             // Accumulate
             for (i, &value) in full_spectrum.iter().enumerate() {
-                if start + i < padded_length {
-                    output[[ch, start + i]] =
-                        output[[ch, start + i]] + T::from(value.re * scale_factor).unwrap();
+                if start + i < original_length {
+                    output[[ch, start + i]] = output[[ch, start + i]]
+                        + T::from(value.re * scale_factor / window_norm).unwrap();
                 }
             }
         }
     }
+
     // Remove padding
     remove_padding(&mut output, n_fft);
     Ok(output)
@@ -146,7 +148,7 @@ where
 
 pub fn hann_window<T>(size: usize, periodic: bool) -> Vec<T>
 where
-    T: Float + rustfft::FftNum,
+    T: Float + FftNum,
 {
     if periodic {
         (0..size)
@@ -163,7 +165,7 @@ where
 
 fn pad_reflect<T>(signal: Array1<T>, pad_length: usize) -> Array1<T>
 where
-    T: Float + rustfft::FftNum,
+    T: Float + FftNum,
 {
     let signal_length = signal.len();
     let mut padded = Array1::zeros(signal_length + 2 * pad_length);
@@ -185,9 +187,20 @@ where
     padded
 }
 
+fn unpad_reflect<T>(padded: Vec<Complex<T>>, original_length: usize) -> Vec<Complex<T>>
+where
+    T: Float + FftNum,
+{
+    let padded_length = padded.len();
+    let pad_length = (padded_length - original_length) / 2;
+
+    // Extract the original signal
+    padded[pad_length..pad_length + original_length].to_vec()
+}
+
 fn remove_padding<T>(padded: &mut Array2<T>, n_fft: usize)
 where
-    T: Float + rustfft::FftNum,
+    T: Float + FftNum,
 {
     let (num_channels, padded_length) = padded.dim();
     let start = n_fft / 2;
@@ -230,4 +243,15 @@ mod tests {
         let expected = arr1(&[3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0]);
         assert_eq!(padded, expected);
     }
+
+    // #[test]
+    // fn test_apply_remove_padding() {
+    //     let input = arr1(&[1.0, 2.0, 3.0, 4.0, 6.0, 7.0, 8.0, 9.0]);
+    //     let expect = input.clone();
+    //     let n_fft = 4;
+    //     let pad_length = n_fft / 2;
+    //     let padded = pad_reflect(input, pad_length);
+    //     let output = unpad_reflect(padded.clone(), expect.len());
+    //     assert_eq!(output, expect);
+    // }
 }

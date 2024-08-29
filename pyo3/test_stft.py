@@ -22,6 +22,7 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
     total_pytorch_diff = 0
     total_rust_stft_pytorch_istft_diff = 0
     total_pytorch_stft_rust_istft_diff = 0
+    total_stft_diff = 0
 
     total_rust_time = 0
     total_pytorch_time = 0
@@ -35,12 +36,12 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
     for _ in range(num_trials):
         signal = generate_test_signal(num_channels, signal_length)
 
-        # Rust STFT -> ISTFT
+        # Rust STFT
         start_time = time.time()
-        rust_roundtrip = rust_stft_roundtrip(signal, n_fft, hop_length)
-        total_rust_time += time.time() - start_time
+        rust_stft_result = rust_stft(signal, n_fft, hop_length, None)
+        total_rust_stft_time += time.time() - start_time
 
-        # PyTorch STFT -> ISTFT
+        # PyTorch STFT
         start_time = time.time()
         pytorch_stft_result = torch.stft(
             torch.from_numpy(signal),
@@ -51,6 +52,16 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
         )
         total_pytorch_stft_time += time.time() - start_time
 
+        # Compare STFT results
+        stft_diff = np.mean(np.abs(rust_stft_result - pytorch_stft_result.numpy()))
+        total_stft_diff += stft_diff
+
+        # Rust STFT -> ISTFT
+        start_time = time.time()
+        rust_roundtrip = rust_stft_roundtrip(signal, n_fft, hop_length)
+        total_rust_time += time.time() - start_time
+
+        # PyTorch STFT -> ISTFT
         start_time = time.time()
         pytorch_roundtrip = torch.istft(
             pytorch_stft_result,
@@ -64,10 +75,6 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
         total_pytorch_time += total_pytorch_stft_time + total_pytorch_istft_time
 
         # Rust STFT -> PyTorch ISTFT
-        start_time = time.time()
-        rust_stft_result = rust_stft(signal, n_fft, hop_length, None)
-        total_rust_stft_time += time.time() - start_time
-
         start_time = time.time()
         pytorch_istft_rust_stft = torch.istft(
             torch.from_numpy(rust_stft_result),
@@ -101,6 +108,7 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
     avg_pytorch_diff = total_pytorch_diff / num_trials
     avg_rust_stft_pytorch_istft_diff = total_rust_stft_pytorch_istft_diff / num_trials
     avg_pytorch_stft_rust_istft_diff = total_pytorch_stft_rust_istft_diff / num_trials
+    avg_stft_diff = total_stft_diff / num_trials
 
     avg_rust_time = total_rust_time / num_trials
     avg_pytorch_time = total_pytorch_time / num_trials
@@ -109,11 +117,12 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
     avg_pytorch_stft_time = total_pytorch_stft_time / num_trials
     avg_rust_istft_time = total_rust_istft_time / num_trials
 
+    print(f"Average STFT difference (Rust vs PyTorch): {avg_stft_diff}")
     print(f"Average Rust roundtrip error: {avg_rust_diff}")
     print(f"Average PyTorch roundtrip error: {avg_pytorch_diff}")
     print(f"Average roundtrip error (Rust STFT -> PyTorch ISTFT): {avg_rust_stft_pytorch_istft_diff}")
     print(f"Average roundtrip error (PyTorch STFT -> Rust ISTFT): {avg_pytorch_stft_rust_istft_diff}")
-    print(f"\nAverage run times:")
+    print(f"\nAverage run times:\n")
     print(f"Rust STFT + ISTFT: {avg_rust_time:.6f} seconds")
     print(f"PyTorch STFT + ISTFT: {avg_pytorch_time:.6f} seconds")
     print(f"Rust STFT: {avg_rust_stft_time:.6f} seconds")

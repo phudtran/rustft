@@ -16,5 +16,6 @@ name = "rustft"
 
 [dependencies]
 log = "0.4.22"
-ndarray = { version = "0.16.1", features = ["approx"] }
+# ndarray = { version = "0.16.1", features = ["approx"] }
+ndarray = ">= 0.13, < 0.16"
 rustfft = "6.2.0"
