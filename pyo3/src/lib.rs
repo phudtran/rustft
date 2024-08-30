@@ -1,6 +1,7 @@
 use num_complex::Complex;
 use numpy::{PyArray1, PyArray2, PyArray3};
 use pyo3::prelude::*;
+use rustfft::FftPlanner;
 extern crate rustft as stft;
 use stft::{fft, ifft, istft, stft};
 
@@ -50,10 +51,11 @@ fn rust_stft(
         Some(w) => Some(w.readonly().as_array().to_owned()),
         None => None,
     };
-
+    let mut planner = FftPlanner::new();
+    let fft = planner.plan_fft_forward(n_fft);
     let binding = input.readonly();
     let input_array = binding.as_array();
-    let stft_res = stft(input_array, n_fft, hop_length, window_array).map_err(|e| {
+    let stft_res = stft(input_array, n_fft, hop_length, window_array, fft).map_err(|e| {
         PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Error in stft: {}", e))
     })?;
     let py_result = PyArray3::from_owned_array_bound(py, stft_res);
@@ -74,7 +76,9 @@ fn rust_istft(
         Some(w) => Some(w.readonly().as_array().to_owned()),
         None => None,
     };
-    let istft_res = istft(input_array, n_fft, hop_length, window).map_err(|e| {
+    let mut planner = FftPlanner::new();
+    let inverse = planner.plan_fft_inverse(n_fft);
+    let istft_res = istft(input_array, n_fft, hop_length, window, inverse).map_err(|e| {
         PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Error in istft: {}", e))
     })?;
     let py_output = PyArray2::from_owned_array_bound(py, istft_res);

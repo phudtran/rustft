@@ -1,6 +1,7 @@
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3};
-use rustfft::{num_complex::Complex, num_traits::Float, FftNum, FftPlanner};
+use rustfft::{num_complex::Complex, num_traits::Float, Fft, FftNum, FftPlanner};
 use std::f64::consts::PI;
+use std::sync::Arc;
 
 pub fn fft<T>(input: ArrayView1<T>) -> Result<Array1<Complex<T>>, String>
 where
@@ -39,6 +40,7 @@ pub fn stft<T>(
     n_fft: usize,
     hop_length: usize,
     window: Option<Array1<T>>,
+    forward: Arc<dyn Fft<T>>,
 ) -> Result<Array3<Complex<T>>, String>
 where
     T: Float + FftNum + ndarray::ScalarOperand,
@@ -54,9 +56,6 @@ where
     let num_frames = (padded_length - n_fft) / hop_length + 1;
     let n_freqs = n_fft / 2 + 1;
 
-    let mut planner = FftPlanner::new();
-    let fft = planner.plan_fft_forward(n_fft);
-
     let window: Array1<T> = match window {
         Some(w) => w,
         None => Array1::from_vec(hann_window(n_fft, true)),
@@ -71,7 +70,7 @@ where
             for i in 0..n_fft {
                 buffer[i] = Complex::new(padded_channel[start + i] * window[i], T::zero());
             }
-            fft.process(match buffer.as_slice_mut() {
+            forward.process(match buffer.as_slice_mut() {
                 Some(slice) => slice,
                 None => return Err("Failed to get mutable slice".to_string()),
             });
@@ -88,6 +87,7 @@ pub fn istft<T>(
     n_fft: usize,
     hop_length: usize,
     window: Option<Array1<T>>,
+    inverse: Arc<dyn Fft<T>>,
 ) -> Result<Array2<T>, String>
 where
     T: Float + FftNum + ndarray::ScalarOperand,
@@ -95,8 +95,6 @@ where
     let num_channels = input.shape()[0];
     let num_frames = input.shape()[2];
     let original_length = (num_frames - 1) * hop_length + n_fft;
-    let mut planner = FftPlanner::new();
-    let ifft = planner.plan_fft_inverse(n_fft);
 
     let mut window: Array1<T> = match window {
         Some(w) => w,
@@ -123,7 +121,7 @@ where
                     full_spectrum[n_fft - i] = value.conj();
                 }
             }
-            ifft.process(&mut full_spectrum);
+            inverse.process(&mut full_spectrum);
             // Overlap-add
             for (i, &value) in full_spectrum.iter().enumerate() {
                 if start + i < original_length {
