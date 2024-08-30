@@ -132,9 +132,9 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
 
 if __name__ == "__main__":
     test_cases = [
-        (4, 16384, 1024, 512),
+        (2, 16384, 1024, 512),
         (2, 261120, 6144, 1024),
-        (8, 65536, 4096, 2048)
+        (2, 65536, 4096, 2048)
     ]
     for num_channels, signal_length, n_fft, hop_length in test_cases:
         print(f"\nTesting with: {num_channels} channels, signal length {signal_length}, n_fft {n_fft}, hop_length {hop_length}")

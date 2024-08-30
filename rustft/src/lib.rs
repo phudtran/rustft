@@ -96,17 +96,15 @@ where
     let num_frames = input.shape()[2];
     let original_length = (num_frames - 1) * hop_length + n_fft;
 
-    let mut window: Array1<T> = match window {
+    let window: Array1<T> = match window {
         Some(w) => w,
         None => Array1::from_vec(hann_window(n_fft, true)),
     };
 
-    let sum: T = window.slice(s![..;hop_length]).sum();
-    window.mapv_inplace(|x| (x / sum));
-
     let scale_factor = T::from(1.0 / (n_fft as f64)).unwrap();
     let mut output: Array2<T> = Array2::zeros((num_channels, original_length));
     for (ch, channel) in input.outer_iter().enumerate() {
+        let mut wsum: Array1<T> = Array1::zeros(original_length);
         for frame in 0..num_frames {
             let start = frame * hop_length;
 
@@ -127,9 +125,14 @@ where
                 if start + i < original_length {
                     output[[ch, start + i]] = output[[ch, start + i]]
                         + T::from(value.re * scale_factor * window[i]).unwrap();
+                    wsum[start + i] = wsum[start + i] + window[i] * window[i];
                 }
             }
         }
+        let mut temp = output.slice(s![ch, ..]).to_owned();
+
+        temp = temp / wsum;
+        output.slice_mut(s![ch, ..]).assign(&temp);
     }
     // Remove padding
     remove_padding(&mut output, n_fft);
