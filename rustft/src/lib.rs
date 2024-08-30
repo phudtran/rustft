@@ -65,21 +65,16 @@ where
     let mut output = Array3::zeros((num_channels, n_freqs, num_frames));
     let mut buffer = Array1::zeros(n_fft);
     for (ch, channel) in input.outer_iter().enumerate() {
-        // Pad the entire channel once
         let padded_channel = pad_reflect(channel.to_owned(), pad_length);
-
         for frame in 0..num_frames {
             let start = frame * hop_length;
-
             for i in 0..n_fft {
                 buffer[i] = Complex::new(padded_channel[start + i] * window[i], T::zero());
             }
-
             fft.process(match buffer.as_slice_mut() {
                 Some(slice) => slice,
                 None => return Err("Failed to get mutable slice".to_string()),
             });
-
             for (freq, &value) in buffer.iter().take(n_freqs).enumerate() {
                 output[[ch, freq, frame]] = value;
             }
@@ -103,21 +98,16 @@ where
     let mut planner = FftPlanner::new();
     let ifft = planner.plan_fft_inverse(n_fft);
 
-    let window: Array1<T> = match window {
-        Some(w) => {
-            let norm_factor = w.mapv(|x: T| x.powi(2)).sum().sqrt();
-            w / norm_factor
-        }
-        None => {
-            let w = Array1::from_vec(hann_window(n_fft, true));
-            let norm_factor = w.mapv(|x: T| x.powi(2)).sum().sqrt();
-            w / norm_factor
-        }
+    let mut window: Array1<T> = match window {
+        Some(w) => w,
+        None => Array1::from_vec(hann_window(n_fft, true)),
     };
+
+    let sum: T = window.slice(s![..;hop_length]).sum();
+    window.mapv_inplace(|x| (x / sum));
 
     let scale_factor = T::from(1.0 / (n_fft as f64)).unwrap();
     let mut output: Array2<T> = Array2::zeros((num_channels, original_length));
-    let window_norm = window.dot(&window);
     for (ch, channel) in input.outer_iter().enumerate() {
         for frame in 0..num_frames {
             let start = frame * hop_length;
@@ -127,28 +117,22 @@ where
             // Reconstruct full spectrum with correct Nyquist handling
             for (i, &value) in channel.slice(s![.., frame]).iter().enumerate() {
                 if i == 0 || i == n_fft / 2 {
-                    // DC and Nyquist components are always real
                     full_spectrum[i] = Complex::new(T::from(value.re).unwrap(), T::zero());
                 } else if i < n_fft / 2 {
-                    // Positive frequencies
                     full_spectrum[i] = value;
-                    // Negative frequencies (complex conjugate)
                     full_spectrum[n_fft - i] = value.conj();
                 }
             }
-
             ifft.process(&mut full_spectrum);
-
-            // Accumulate
+            // Overlap-add
             for (i, &value) in full_spectrum.iter().enumerate() {
                 if start + i < original_length {
                     output[[ch, start + i]] = output[[ch, start + i]]
-                        + T::from(value.re * scale_factor / window_norm).unwrap();
+                        + T::from(value.re * scale_factor * window[i]).unwrap();
                 }
             }
         }
     }
-
     // Remove padding
     remove_padding(&mut output, n_fft);
     Ok(output)
@@ -193,17 +177,6 @@ where
         padded[pad_length + signal_length + i] = signal[signal_length - 2 - i];
     }
     padded
-}
-
-fn unpad_reflect<T>(padded: Vec<Complex<T>>, original_length: usize) -> Vec<Complex<T>>
-where
-    T: Float + FftNum,
-{
-    let padded_length = padded.len();
-    let pad_length = (padded_length - original_length) / 2;
-
-    // Extract the original signal
-    padded[pad_length..pad_length + original_length].to_vec()
 }
 
 fn remove_padding<T>(padded: &mut Array2<T>, n_fft: usize)
@@ -251,15 +224,4 @@ mod tests {
         let expected = arr1(&[3.0, 2.0, 1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0]);
         assert_eq!(padded, expected);
     }
-
-    // #[test]
-    // fn test_apply_remove_padding() {
-    //     let input = arr1(&[1.0, 2.0, 3.0, 4.0, 6.0, 7.0, 8.0, 9.0]);
-    //     let expect = input.clone();
-    //     let n_fft = 4;
-    //     let pad_length = n_fft / 2;
-    //     let padded = pad_reflect(input, pad_length);
-    //     let output = unpad_reflect(padded.clone(), expect.len());
-    //     assert_eq!(output, expect);
-    // }
 }
