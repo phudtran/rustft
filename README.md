@@ -9,6 +9,10 @@ For example n_fft == 6144 and hop_length == 1024
 cargo add rustft
 ```
 
+# Example
+
+See `pyo3/lib.rs`
+
 # Performance
 
 WIP. No optimizations, super slow.
