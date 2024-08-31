@@ -3,16 +3,16 @@ use rustfft::{num_complex::Complex, num_traits::Float, Fft, FftNum, FftPlanner};
 use std::f64::consts::PI;
 use std::sync::Arc;
 
-#[derive(Clone)]
 pub struct Stft<T>
 where
     T: Float + FftNum + ndarray::ScalarOperand,
 {
     n_fft: usize,
     hop_length: usize,
+    window: Vec<T>,
     forward: Arc<dyn Fft<T>>,
     inverse: Arc<dyn Fft<T>>,
-    window: Vec<T>,
+    planner: FftPlanner<T>,
 }
 
 impl<T> Stft<T>
@@ -28,12 +28,43 @@ where
     where
         T: Float + FftNum + ndarray::ScalarOperand,
     {
+        let mut planner = FftPlanner::new();
+        let forward = planner.plan_fft_forward(n_fft);
+        let inverse = planner.plan_fft_inverse(n_fft);
         Self {
             n_fft,
             hop_length,
-            forward: FftPlanner::new().plan_fft_forward(n_fft),
-            inverse: FftPlanner::new().plan_fft_inverse(n_fft),
+            forward,
+            inverse,
+            planner,
             window: window_function.new(n_fft, window_periodic),
+        }
+    }
+
+    pub fn update(
+        &mut self,
+        n_fft: Option<usize>,
+        hop_length: Option<usize>,
+        window_function: Option<WindowFunction<T>>,
+        window_periodic: Option<bool>,
+    ) {
+        match n_fft {
+            Some(n_fft) => {
+                self.n_fft = n_fft;
+                self.forward = self.planner.plan_fft_forward(self.n_fft);
+                self.inverse = self.planner.plan_fft_inverse(self.n_fft);
+            }
+            None => {}
+        }
+        match hop_length {
+            Some(hop_length) => self.hop_length = hop_length,
+            None => {}
+        }
+        match window_function {
+            Some(window_function) => {
+                self.window = window_function.new(self.n_fft, window_periodic.unwrap_or(false))
+            }
+            None => {}
         }
     }
 

@@ -10,7 +10,7 @@ checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
 name = "benchmarks"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "num-complex",
  "numpy",
@@ -33,10 +33,10 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "example"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "ndarray 0.16.1",
- "rustft 0.0.13",
+ "rustft 0.0.14",
 ]
 
 [[package]]
@@ -345,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "rustft"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "log",
  "ndarray 0.16.1",
