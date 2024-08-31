@@ -75,7 +75,7 @@ where
         let num_frames = input.shape()[2];
         let original_length = (num_frames - 1) * self.hop_length + self.n_fft;
 
-        let scale_factor = T::from(1.0 / (self.n_fft as f64)).unwrap();
+        let scale_factor = T::from(1.0 / (self.n_fft as f64)).expect("Division by zero");
         let mut output: Array2<T> = Array2::zeros((num_channels, original_length));
         for (ch, channel) in input.outer_iter().enumerate() {
             let mut wsum: Array1<T> = Array1::zeros(original_length);
@@ -87,7 +87,10 @@ where
                 // Reconstruct full spectrum with correct Nyquist handling
                 for (i, &value) in channel.slice(s![.., frame]).iter().enumerate() {
                     if i == 0 || i == self.n_fft / 2 {
-                        full_spectrum[i] = Complex::new(T::from(value.re).unwrap(), T::zero());
+                        full_spectrum[i] = Complex::new(
+                            T::from(value.re).expect("Failed to convert real part to T"),
+                            T::zero(),
+                        );
                     } else if i < self.n_fft / 2 {
                         full_spectrum[i] = value;
                         full_spectrum[self.n_fft - i] = value.conj();
@@ -98,7 +101,8 @@ where
                 for (i, &value) in full_spectrum.iter().enumerate() {
                     if start + i < original_length {
                         output[[ch, start + i]] = output[[ch, start + i]]
-                            + T::from(value.re * scale_factor * self.window[i]).unwrap();
+                            + T::from(value.re * scale_factor * self.window[i])
+                                .expect("Convert overlap sum to T");
                         wsum[start + i] = wsum[start + i] + self.window[i] * self.window[i];
                     }
                 }
@@ -154,7 +158,7 @@ where
                 }
                 WindowFunction::Gaussian(sigma) => {
                     let alpha = T::one() / *sigma;
-                    (T::from(-0.5).unwrap()
+                    (T::from(-0.5).expect("Failed to create Gaussian window")
                         * (alpha
                             * (T::from(x - 0.5).expect(
                                 "
@@ -256,7 +260,7 @@ where
     let mut buffer = input.to_vec();
     ifft.process(&mut buffer);
     // Normalize and extract real parts
-    let scale = T::from(len).unwrap();
+    let scale = T::from(len).expect("Failed to convert len to T");
     let result: Array1<T> = buffer.into_iter().map(|c| c.re / scale).collect();
     Ok(result)
 }
