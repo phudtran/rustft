@@ -1,26 +1,24 @@
-# WIP STFT/ISTFT Library
+# Rustft
 
-Handles non-COLA compliant windows (Must be (NOLA)[https://gauss256.github.io/blog/cola.html]).
-
-For example
-n_fft: 6144
-hop_length: 1024
+Perform the Short-time Fourier transform and its inverse. Handles non-COLA compliant windows (Must be [NOLA](https://gauss256.github.io/blog/cola.html)).
 
 # Install
 
-```
+```bash
 cargo add rustft
 ```
 
 # Example
 
-```
+```rust
 use ndarray::ArrayView2;
 use rustft::{Stft, WindowFunction};
 
 fn main() {
     // Initialize a new STFT object
-    let stft = Stft::new(1024, 256, WindowFunction::Hann::<f64>, true);
+    let n_fft = 1024;
+    let hop_length = 256;
+    let stft = Stft::new(n_fft, hop_length, WindowFunction::Hann::<f64>, true);
     // Create a 2D array of f64
     let data = vec![0.0; 2048];
     let input = ArrayView2::from_shape((2, 1024), &data).unwrap();
@@ -31,25 +29,23 @@ fn main() {
     let istft_res = stft.inverse(stft_res.view()).unwrap();
     assert_eq!(expected_output, istft_res);
 }
+
 ```
-
-# Performance
-
-WIP. No optimizations, super slow.
 
 # How to run benchmarks
 
-```
+```bash
 cd benchmarks
 source ~/.venv/bin/activate
 pip install numpy torch
 cargo build --release
 maturin develop
 python3 test_stft.py
-
 ```
 
 # Benchmarks
+
+WIP. No optimizations, super slow.
 
 ```
 Testing with: 2 channels, signal length 16384, n_fft 1024, hop_length 512

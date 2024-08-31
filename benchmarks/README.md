@@ -10,11 +10,10 @@ WIP. No optimizations, super slow.
 
 # How to run test
 
-```
+```bash
 source ~/.venv/bin/activate
 pip install numpy torch
 cargo build --release
 maturin develop
 python3 test_stft.py
-
 ```
