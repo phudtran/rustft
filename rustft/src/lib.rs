@@ -3,156 +3,186 @@ use rustfft::{num_complex::Complex, num_traits::Float, Fft, FftNum, FftPlanner};
 use std::f64::consts::PI;
 use std::sync::Arc;
 
-pub fn fft<T>(input: ArrayView1<T>) -> Result<Array1<Complex<T>>, String>
+#[derive(Clone)]
+pub struct Stft<T>
 where
-    T: Float + FftNum,
+    T: Float + FftNum + ndarray::ScalarOperand,
 {
-    let mut planner = FftPlanner::new();
-    let len = input.len();
-    let fft = planner.plan_fft_forward(len);
-    let mut buffer: Vec<Complex<T>> = input
-        .to_vec()
-        .iter()
-        .map(|&x| Complex::new(x, T::zero()))
-        .collect();
-    fft.process(&mut buffer);
-    let array = Array1::from_vec(buffer);
-    Ok(array)
-}
-
-pub fn ifft<T>(input: ArrayView1<Complex<T>>) -> Result<Array1<T>, String>
-where
-    T: Float + FftNum,
-{
-    let mut planner = FftPlanner::new();
-    let len = input.len();
-    let ifft = planner.plan_fft_inverse(len);
-    let mut buffer = input.to_vec();
-    ifft.process(&mut buffer);
-    // Normalize and extract real parts
-    let scale = T::from(len).unwrap();
-    let result: Array1<T> = buffer.into_iter().map(|c| c.re / scale).collect();
-    Ok(result)
-}
-
-pub fn stft<T>(
-    input: ArrayView2<T>,
     n_fft: usize,
     hop_length: usize,
-    window: Option<Array1<T>>,
     forward: Arc<dyn Fft<T>>,
-) -> Result<Array3<Complex<T>>, String>
-where
-    T: Float + FftNum + ndarray::ScalarOperand,
-{
-    let num_channels = input.shape()[0];
-    let signal_length = input.shape()[1];
-
-    // For center padding (reflection)
-    let pad_length = n_fft / 2;
-    let padded_length = signal_length + 2 * pad_length;
-
-    // Calculate the number of frames
-    let num_frames = (padded_length - n_fft) / hop_length + 1;
-    let n_freqs = n_fft / 2 + 1;
-
-    let window: Array1<T> = match window {
-        Some(w) => w,
-        None => Array1::from_vec(hann_window(n_fft, true)),
-    };
-
-    let mut output = Array3::zeros((num_channels, n_freqs, num_frames));
-    let mut buffer = Array1::zeros(n_fft);
-    for (ch, channel) in input.outer_iter().enumerate() {
-        let padded_channel = pad_reflect(channel.to_owned(), pad_length);
-        for frame in 0..num_frames {
-            let start = frame * hop_length;
-            for i in 0..n_fft {
-                buffer[i] = Complex::new(padded_channel[start + i] * window[i], T::zero());
-            }
-            forward.process(match buffer.as_slice_mut() {
-                Some(slice) => slice,
-                None => return Err("Failed to get mutable slice".to_string()),
-            });
-            for (freq, &value) in buffer.iter().take(n_freqs).enumerate() {
-                output[[ch, freq, frame]] = value;
-            }
-        }
-    }
-    Ok(output)
-}
-
-pub fn istft<T>(
-    input: ArrayView3<Complex<T>>,
-    n_fft: usize,
-    hop_length: usize,
-    window: Option<Array1<T>>,
     inverse: Arc<dyn Fft<T>>,
-) -> Result<Array2<T>, String>
+    window: Vec<T>,
+}
+
+impl<T> Stft<T>
 where
     T: Float + FftNum + ndarray::ScalarOperand,
 {
-    let num_channels = input.shape()[0];
-    let num_frames = input.shape()[2];
-    let original_length = (num_frames - 1) * hop_length + n_fft;
+    pub fn new(
+        n_fft: usize,
+        hop_length: usize,
+        window_function: WindowFunction<T>,
+        window_periodic: bool,
+    ) -> Self
+    where
+        T: Float + FftNum + ndarray::ScalarOperand,
+    {
+        Self {
+            n_fft,
+            hop_length,
+            forward: FftPlanner::new().plan_fft_forward(n_fft),
+            inverse: FftPlanner::new().plan_fft_inverse(n_fft),
+            window: window_function.new(n_fft, window_periodic),
+        }
+    }
 
-    let window: Array1<T> = match window {
-        Some(w) => w,
-        None => Array1::from_vec(hann_window(n_fft, true)),
-    };
+    pub fn forward(&self, input: ArrayView2<T>) -> Result<Array3<Complex<T>>, String> {
+        let num_channels = input.shape()[0];
+        let signal_length = input.shape()[1];
 
-    let scale_factor = T::from(1.0 / (n_fft as f64)).unwrap();
-    let mut output: Array2<T> = Array2::zeros((num_channels, original_length));
-    for (ch, channel) in input.outer_iter().enumerate() {
-        let mut wsum: Array1<T> = Array1::zeros(original_length);
-        for frame in 0..num_frames {
-            let start = frame * hop_length;
+        // For center padding (reflection)
+        let pad_length = self.n_fft / 2;
+        let padded_length = signal_length + 2 * pad_length;
 
-            let mut full_spectrum = vec![Complex::new(T::zero(), T::zero()); n_fft];
+        // Calculate the number of frames
+        let num_frames = (padded_length - self.n_fft) / self.hop_length + 1;
+        let n_freqs = self.n_fft / 2 + 1;
 
-            // Reconstruct full spectrum with correct Nyquist handling
-            for (i, &value) in channel.slice(s![.., frame]).iter().enumerate() {
-                if i == 0 || i == n_fft / 2 {
-                    full_spectrum[i] = Complex::new(T::from(value.re).unwrap(), T::zero());
-                } else if i < n_fft / 2 {
-                    full_spectrum[i] = value;
-                    full_spectrum[n_fft - i] = value.conj();
+        let mut output = Array3::zeros((num_channels, n_freqs, num_frames));
+        let mut buffer = Array1::zeros(self.n_fft);
+        for (ch, channel) in input.outer_iter().enumerate() {
+            let padded_channel = pad_reflect(channel.to_owned(), pad_length);
+            for frame in 0..num_frames {
+                let start = frame * self.hop_length;
+                for i in 0..self.n_fft {
+                    buffer[i] = Complex::new(padded_channel[start + i] * self.window[i], T::zero());
                 }
-            }
-            inverse.process(&mut full_spectrum);
-            // Overlap-add
-            for (i, &value) in full_spectrum.iter().enumerate() {
-                if start + i < original_length {
-                    output[[ch, start + i]] = output[[ch, start + i]]
-                        + T::from(value.re * scale_factor * window[i]).unwrap();
-                    wsum[start + i] = wsum[start + i] + window[i] * window[i];
+                self.forward.process(match buffer.as_slice_mut() {
+                    Some(slice) => slice,
+                    None => return Err("Failed to get mutable slice".to_string()),
+                });
+                for (freq, &value) in buffer.iter().take(n_freqs).enumerate() {
+                    output[[ch, freq, frame]] = value;
                 }
             }
         }
-        let mut temp = output.slice(s![ch, ..]).to_owned();
-
-        temp = temp / wsum;
-        output.slice_mut(s![ch, ..]).assign(&temp);
+        Ok(output)
     }
-    // Remove padding
-    remove_padding(&mut output, n_fft);
-    Ok(output)
+
+    pub fn inverse(&self, input: ArrayView3<Complex<T>>) -> Result<Array2<T>, String> {
+        let num_channels = input.shape()[0];
+        let num_frames = input.shape()[2];
+        let original_length = (num_frames - 1) * self.hop_length + self.n_fft;
+
+        let scale_factor = T::from(1.0 / (self.n_fft as f64)).unwrap();
+        let mut output: Array2<T> = Array2::zeros((num_channels, original_length));
+        for (ch, channel) in input.outer_iter().enumerate() {
+            let mut wsum: Array1<T> = Array1::zeros(original_length);
+            for frame in 0..num_frames {
+                let start = frame * self.hop_length;
+
+                let mut full_spectrum = vec![Complex::new(T::zero(), T::zero()); self.n_fft];
+
+                // Reconstruct full spectrum with correct Nyquist handling
+                for (i, &value) in channel.slice(s![.., frame]).iter().enumerate() {
+                    if i == 0 || i == self.n_fft / 2 {
+                        full_spectrum[i] = Complex::new(T::from(value.re).unwrap(), T::zero());
+                    } else if i < self.n_fft / 2 {
+                        full_spectrum[i] = value;
+                        full_spectrum[self.n_fft - i] = value.conj();
+                    }
+                }
+                self.inverse.process(&mut full_spectrum);
+                // Overlap-add
+                for (i, &value) in full_spectrum.iter().enumerate() {
+                    if start + i < original_length {
+                        output[[ch, start + i]] = output[[ch, start + i]]
+                            + T::from(value.re * scale_factor * self.window[i]).unwrap();
+                        wsum[start + i] = wsum[start + i] + self.window[i] * self.window[i];
+                    }
+                }
+            }
+            let mut temp = output.slice(s![ch, ..]).to_owned();
+
+            temp = temp / wsum;
+            output.slice_mut(s![ch, ..]).assign(&temp);
+        }
+
+        remove_padding(&mut output, self.n_fft);
+        Ok(output)
+    }
 }
 
-pub fn hann_window<T>(size: usize, periodic: bool) -> Vec<T>
+#[derive(Debug, Clone, Copy)]
+pub enum WindowFunction<T>
 where
     T: Float + FftNum,
 {
-    if periodic {
-        (0..size)
-            .map(|n| T::from(0.5 * (1.0 - (2.0 * PI * n as f64 / size as f64).cos())).unwrap())
-            .collect()
-    } else {
-        (0..size)
-            .map(|n| {
-                T::from(0.5 * (1.0 - (2.0 * PI * n as f64 / (size - 1) as f64).cos())).unwrap()
-            })
-            .collect()
+    Rectangular,
+    Hann,
+    Hamming,
+    Blackman,
+    Gaussian(T), // Standard deviation
+    Triangular,
+    Bartlett,
+    FlatTop,
+}
+
+impl<T> WindowFunction<T>
+where
+    T: Float + FftNum,
+{
+    pub fn new(&self, size: usize, periodic: bool) -> Vec<T>
+    where
+        T: Float + FftNum,
+    {
+        let mut window = Vec::with_capacity(size);
+        let m = if periodic { size + 1 } else { size };
+
+        for n in 0..size {
+            let x = n as f64 / (m - 1) as f64;
+            let value = match self {
+                WindowFunction::Rectangular => T::one(),
+                WindowFunction::Hann => T::from(0.5 * (1.0 - (2.0 * PI * x).cos()))
+                    .expect("Failed to create Hann window"),
+                WindowFunction::Hamming => T::from(0.54 - 0.46 * (2.0 * PI * x).cos())
+                    .expect("Failed to create Hamming window"),
+                WindowFunction::Blackman => {
+                    T::from(0.42 - 0.5 * (2.0 * PI * x).cos() + 0.08 * (4.0 * PI * x).cos())
+                        .expect("Failed to create Blackman window")
+                }
+                WindowFunction::Gaussian(sigma) => {
+                    let alpha = T::one() / *sigma;
+                    (T::from(-0.5).unwrap()
+                        * (alpha
+                            * (T::from(x - 0.5).expect(
+                                "
+                    Failed to create Gaussian window",
+                            )))
+                        .powi(2))
+                    .exp()
+                }
+                WindowFunction::Triangular => T::from(1.0 - (2.0 * x - 1.0).abs())
+                    .expect("Failed to create Triangular window"),
+                WindowFunction::Bartlett => {
+                    if x < 0.5 {
+                        T::from(2.0 * x).expect("Failed to create Bartlett window")
+                    } else {
+                        T::from(2.0 - 2.0 * x).expect("Failed to create Bartlett window")
+                    }
+                }
+                WindowFunction::FlatTop => T::from(
+                    0.21557895 - 0.41663158 * (2.0 * PI * x).cos()
+                        + 0.277263158 * (4.0 * PI * x).cos()
+                        - 0.083578947 * (6.0 * PI * x).cos()
+                        + 0.006947368 * (8.0 * PI * x).cos(),
+                )
+                .expect("Failed to create FlatTop window"),
+            };
+            window.push(value);
+        }
+        window
     }
 }
 
@@ -197,6 +227,38 @@ where
 
     // Truncate
     padded.slice_collapse(s![.., ..(end - start)]);
+}
+
+pub fn fft<T>(input: ArrayView1<T>) -> Result<Array1<Complex<T>>, String>
+where
+    T: Float + FftNum,
+{
+    let mut planner = FftPlanner::new();
+    let len = input.len();
+    let fft = planner.plan_fft_forward(len);
+    let mut buffer: Vec<Complex<T>> = input
+        .to_vec()
+        .iter()
+        .map(|&x| Complex::new(x, T::zero()))
+        .collect();
+    fft.process(&mut buffer);
+    let array = Array1::from_vec(buffer);
+    Ok(array)
+}
+
+pub fn ifft<T>(input: ArrayView1<Complex<T>>) -> Result<Array1<T>, String>
+where
+    T: Float + FftNum,
+{
+    let mut planner = FftPlanner::new();
+    let len = input.len();
+    let ifft = planner.plan_fft_inverse(len);
+    let mut buffer = input.to_vec();
+    ifft.process(&mut buffer);
+    // Normalize and extract real parts
+    let scale = T::from(len).unwrap();
+    let result: Array1<T> = buffer.into_iter().map(|c| c.re / scale).collect();
+    Ok(result)
 }
 
 #[cfg(test)]

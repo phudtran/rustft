@@ -1,9 +1,7 @@
+use ::rustft::{fft, ifft, Stft, WindowFunction};
 use num_complex::Complex;
 use numpy::{PyArray1, PyArray2, PyArray3};
 use pyo3::prelude::*;
-use rustfft::FftPlanner;
-extern crate rustft as stft;
-use stft::{fft, ifft, istft, stft};
 
 #[pyfunction]
 fn rust_fft(py: Python, input: &PyArray1<f64>) -> PyResult<Py<PyArray1<Complex<f64>>>> {
@@ -45,17 +43,11 @@ fn rust_stft(
     input: &PyArray2<f64>,
     n_fft: usize,
     hop_length: usize,
-    window: Option<&PyArray1<f64>>,
 ) -> PyResult<Py<PyArray3<Complex<f64>>>> {
-    let window_array = match window {
-        Some(w) => Some(w.readonly().as_array().to_owned()),
-        None => None,
-    };
-    let mut planner = FftPlanner::new();
-    let fft = planner.plan_fft_forward(n_fft);
     let binding = input.readonly();
     let input_array = binding.as_array();
-    let stft_res = stft(input_array, n_fft, hop_length, window_array, fft).map_err(|e| {
+    let stft = Stft::new(n_fft, hop_length, WindowFunction::Hann, true);
+    let stft_res = stft.forward(input_array).map_err(|e| {
         PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Error in stft: {}", e))
     })?;
     let py_result = PyArray3::from_owned_array_bound(py, stft_res);
@@ -68,18 +60,13 @@ fn rust_istft(
     input: &PyArray3<Complex<f64>>,
     n_fft: usize,
     hop_length: usize,
-    window: Option<&PyArray1<f64>>,
 ) -> PyResult<Py<PyArray2<f64>>> {
     let binding = input.readonly();
     let input_array = binding.as_array();
-    let window = match window {
-        Some(w) => Some(w.readonly().as_array().to_owned()),
-        None => None,
-    };
-    let mut planner = FftPlanner::new();
-    let inverse = planner.plan_fft_inverse(n_fft);
-    let istft_res = istft(input_array, n_fft, hop_length, window, inverse).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Error in istft: {}", e))
+
+    let stft = Stft::new(n_fft, hop_length, WindowFunction::Hann, true);
+    let istft_res = stft.inverse(input_array).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Error in stft: {}", e))
     })?;
     let py_output = PyArray2::from_owned_array_bound(py, istft_res);
     Ok(py_output.into())
@@ -92,8 +79,8 @@ fn rust_stft_roundtrip(
     n_fft: usize,
     hop_length: usize,
 ) -> PyResult<Py<PyArray2<f64>>> {
-    let stft_result = rust_stft(py, input, n_fft, hop_length, None)?;
-    let istft_result = rust_istft(py, &stft_result.as_ref(py), n_fft, hop_length, None)?;
+    let stft_result = rust_stft(py, input, n_fft, hop_length)?;
+    let istft_result = rust_istft(py, &stft_result.as_ref(py), n_fft, hop_length)?;
     Ok(istft_result)
 }
 

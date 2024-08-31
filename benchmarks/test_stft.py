@@ -38,7 +38,7 @@ def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trial
 
         # Rust STFT
         start_time = time.time()
-        rust_stft_result = rust_stft(signal, n_fft, hop_length, None)
+        rust_stft_result = rust_stft(signal, n_fft, hop_length)
         total_rust_stft_time += time.time() - start_time
 
         # PyTorch STFT

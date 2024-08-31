@@ -9,6 +9,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
+name = "benchmarks"
+version = "0.0.9"
+dependencies = [
+ "num-complex",
+ "numpy",
+ "pyo3",
+ "rustfft",
+ "rustft 0.0.8",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19,6 +30,14 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "example"
+version = "0.0.9"
+dependencies = [
+ "ndarray 0.16.1",
+ "rustft 0.0.9",
+]
 
 [[package]]
 name = "heck"
@@ -315,9 +334,9 @@ dependencies = [
 
 [[package]]
 name = "rustft"
-version = "0.0.6"
+version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e90dfd46b3d5ecdce899ead7ec2ac0e2b4ab31138e5efe0b30bec495352faef1"
+checksum = "36ee64f20ee5c93a243d7136732baded4613b07cc0f2061f63079a8e1ebf106e"
 dependencies = [
  "log",
  "ndarray 0.15.6",
@@ -326,22 +345,11 @@ dependencies = [
 
 [[package]]
 name = "rustft"
-version = "0.0.7"
+version = "0.0.9"
 dependencies = [
  "log",
  "ndarray 0.16.1",
  "rustfft",
-]
-
-[[package]]
-name = "rustft-pyo3"
-version = "0.0.7"
-dependencies = [
- "num-complex",
- "numpy",
- "pyo3",
- "rustfft",
- "rustft 0.0.6",
 ]
 
 [[package]]

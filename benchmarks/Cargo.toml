@@ -1,5 +1,5 @@
 [package]
-name = "rustft-pyo3"
+name = "benchmarks"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -16,8 +16,8 @@ name = "rustft"
 crate-type = ["cdylib"]
 
 [dependencies]
-# rustft = { path = "../rustft", package = "rustft", version = "0.0.6" }
-rustft = "0.0.6"
+# rustft = { path = "../rustft", package = "rustft"}
+rustft = "0.0.8"
 num-complex = "0.4.6"
 numpy = "0.21.0"
 pyo3 = "0.21.0"

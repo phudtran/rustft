@@ -2,8 +2,7 @@
 
 # WIP
 
-Currently broken until
-https://github.com/PyO3/rust-numpy/pull/439 is merged
+https://github.com/PyO3/rust-numpy/pull/439 needs to be merged to update to ndarray 0.16
 
 # Performance
 

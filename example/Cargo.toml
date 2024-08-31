@@ -1,0 +1,16 @@
+[package]
+name = "example"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+readme = "README.md"
+
+[dependencies]
+rustft = { path = "../rustft", package = "rustft" }
+ndarray = { version = "0.16.1"}
+# ndarray = ">= 0.13, < 0.16"
+
