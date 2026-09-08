@@ -1,8 +1,14 @@
-"""Diff rustft against PyTorch, in float64, case by case.
+"""Diff rustft against PyTorch, case by case, in float64 and in float32.
 
-Everything here is float64 on purpose: torch's window helpers default to
-float32, and that alone injects ~1e-7 of error that has nothing to do with
-rustft.
+Within a run both sides use the same precision throughout -- same signal bits,
+same window dtype -- so what the diff measures is the arithmetic, not a dtype
+mismatch. Getting that wrong is the classic trap here: torch's window helpers
+default to float32, and feeding one to a float64 signal injects ~1e-7 of error
+that has nothing to do with rustft.
+
+Tolerances are relative, because f32 and f64 land four decades apart: f64
+agrees to ~1e-15 of the spectrogram peak, f32 to ~2e-7, which is a couple of
+f32 ulps and the best the format allows.
 """
 import os, shutil, subprocess, sys, tempfile
 import numpy as np
@@ -20,39 +26,50 @@ WINDOWS = {
 }
 
 
-def make_window(name, n_fft, periodic):
+def make_window(name, n_fft, periodic, dtype):
     if name == "rectangular":
-        return torch.ones(n_fft, dtype=torch.float64)
-    return WINDOWS[name](n_fft, periodic=periodic, dtype=torch.float64)
+        return torch.ones(n_fft, dtype=dtype)
+    return WINDOWS[name](n_fft, periodic=periodic, dtype=dtype)
 
 
-def run_case(channels, length, n_fft, hop, win="hann", periodic=True, seed=0):
+def run_case(channels, length, n_fft, hop, win="hann", periodic=True, seed=0,
+             precision="f64", share_window=False):
+    torch_dtype = torch.float32 if precision == "f32" else torch.float64
+    np_dtype = np.float32 if precision == "f32" else np.float64
     rng = np.random.default_rng(seed)
-    sig = rng.standard_normal((channels, length))
-    window = make_window(win, n_fft, periodic)
+    # Round-trip through the working precision so both sides see identical bits;
+    # the wire format stays f64 and widening back is lossless.
+    sig = rng.standard_normal((channels, length)).astype(np_dtype).astype(np.float64)
+    window = make_window(win, n_fft, periodic, torch_dtype)
 
     tmp = tempfile.mkdtemp(prefix="rustft-conf-")
     try:
         sig.astype("<f8").tofile(os.path.join(tmp, "in.bin"))
+        # Widening f32 window samples to f64 and narrowing them back in Rust is lossless,
+        # so the wire format stays f64 here too.
+        extra = []
+        if share_window:
+            window.numpy().astype("<f8").tofile(os.path.join(tmp, "window.bin"))
+            extra = [os.path.join(tmp, "window.bin")]
 
         try:
-            t_stft = torch.stft(torch.from_numpy(sig), n_fft, hop, window=window,
-                                center=True, return_complex=True)
+            t_stft = torch.stft(torch.from_numpy(sig.astype(np_dtype)), n_fft, hop,
+                                window=window, center=True, return_complex=True)
         except RuntimeError as e:
             # PyTorch refuses this shape. rustft should refuse it too, rather than
             # panicking or inventing an answer.
             np.zeros(0, "<f8").tofile(os.path.join(tmp, "torch_stft.bin"))
             r = subprocess.run([BIN, str(n_fft), str(hop), win, str(periodic).lower(),
-                                str(channels), str(length), tmp],
+                                str(channels), str(length), tmp, precision] + extra,
                                capture_output=True, text=True)
             return {"both_reject": r.returncode != 0,
                     "torch_error": str(e).splitlines()[0][:60]}
-        ts = t_stft.numpy()
+        ts = t_stft.numpy().astype(np.complex128)
         np.stack([ts.real, ts.imag], -1).astype("<f8").tofile(
             os.path.join(tmp, "torch_stft.bin"))
 
         r = subprocess.run([BIN, str(n_fft), str(hop), win, str(periodic).lower(),
-                            str(channels), str(length), tmp],
+                            str(channels), str(length), tmp, precision] + extra,
                            capture_output=True, text=True)
         if r.returncode != 0:
             return {"error": (r.stderr.strip().splitlines() or ["?"])[-1]}
@@ -64,7 +81,8 @@ def run_case(channels, length, n_fft, hop, win="hann", periodic=True, seed=0):
         shape = open(os.path.join(tmp, "rust_istft.shape")).read()
         rust_rejected = shape.startswith("error")
         try:
-            t_istft = torch.istft(t_stft, n_fft, hop, window=window, center=True).numpy()
+            t_istft = torch.istft(t_stft, n_fft, hop, window=window,
+                                  center=True).numpy().astype(np.float64)
             torch_rejected = False
         except RuntimeError:
             torch_rejected = True
@@ -78,12 +96,12 @@ def run_case(channels, length, n_fft, hop, win="hann", periodic=True, seed=0):
         if rs.shape != ts.shape:
             out["stft_shape"] = f"rust {rs.shape} vs torch {ts.shape}"
         else:
-            out["stft_max"] = float(np.abs(rs - ts).max())
             out["stft_rel"] = float(np.abs(rs - ts).max() / max(np.abs(ts).max(), 1e-30))
         if ri.shape != t_istft.shape:
             out["istft_shape"] = f"rust {ri.shape} vs torch {t_istft.shape}"
         else:
-            out["istft_max"] = float(np.abs(ri - t_istft).max())
+            out["istft_rel"] = float(
+                np.abs(ri - t_istft).max() / max(np.abs(t_istft).max(), 1e-30))
         return out
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -110,34 +128,45 @@ CASES = [
     ("single channel long",                1, 261120, 6144, 1024, "hann", True),
 ]
 
+# Relative to the peak of the transform being compared. f64 has ~16 decimal digits
+# and f32 has ~7; both bounds are a small multiple of the format's own epsilon.
+TOLERANCE = {"f64": 1e-12, "f32": 1e-5}
+
 if __name__ == "__main__":
     if not os.path.exists(BIN):
         sys.exit(f"build first: cargo build -p conformance --release ({BIN} missing)")
     width = max(len(c[0]) for c in CASES)
-    worst = 0.0
-    for label, ch, ln, n, h, w, p in CASES:
-        try:
-            res = run_case(ch, ln, n, h, w, p)
-        except Exception as e:
-            print(f"{label:<{width}}  EXC  {type(e).__name__}: {str(e).splitlines()[0][:90]}")
-            continue
-        if "both_reject" in res:
-            flag = "ok " if res["both_reject"] else "BAD"
-            note = "both reject" if res["both_reject"] else "only one of the two rejects it"
-            print(f"{label:<{width}}  {flag}  {note}")
-            continue
-        if "error" in res:
-            print(f"{label:<{width}}  RUST-ERR  {res['error'][:90]}")
-            continue
-        bits = []
-        for k in ("stft_shape", "istft_shape"):
-            if k in res:
-                bits.append(f"{k} {res[k]}")
-        for k in ("stft_max", "istft_max"):
-            if k in res:
-                bits.append(f"{k}={res[k]:.3e}")
-                worst = max(worst, res[k])
-        flag = "ok " if all(res.get(k, 1) < 1e-9 for k in ("stft_max", "istft_max")) \
-                        and "stft_shape" not in res and "istft_shape" not in res else "BAD"
-        print(f"{label:<{width}}  {flag}  {'  '.join(bits)}")
-    print(f"\nworst absolute difference across all passing cases: {worst:.3e}")
+    share = "--share-window" in sys.argv
+    for precision in ("f64", "f32"):
+        note = ", PyTorch's window passed to with_window" if share else ""
+        print(f"==== {precision} on both sides "
+              f"(tolerance {TOLERANCE[precision]:.0e} of peak{note}) ====")
+        worst = 0.0
+        for label, ch, ln, n, h, w, p in CASES:
+            try:
+                res = run_case(ch, ln, n, h, w, p, precision=precision,
+                               share_window=share)
+            except Exception as e:
+                print(f"{label:<{width}}  EXC  {type(e).__name__}: "
+                      f"{str(e).splitlines()[0][:80]}")
+                continue
+            if "both_reject" in res:
+                flag = "ok " if res["both_reject"] else "BAD"
+                note = "both reject" if res["both_reject"] else "only one of the two rejects it"
+                print(f"{label:<{width}}  {flag}  {note}")
+                continue
+            if "error" in res:
+                print(f"{label:<{width}}  RUST-ERR  {res['error'][:80]}")
+                continue
+            bits, ok = [], True
+            for key in ("stft_shape", "istft_shape"):
+                if key in res:
+                    bits.append(f"{key} {res[key]}")
+                    ok = False
+            for key in ("stft_rel", "istft_rel"):
+                if key in res:
+                    bits.append(f"{key}={res[key]:.3e}")
+                    worst = max(worst, res[key])
+                    ok = ok and res[key] < TOLERANCE[precision]
+            print(f"{label:<{width}}  {'ok ' if ok else 'BAD'}  {'  '.join(bits)}")
+        print(f"worst relative difference: {worst:.3e}\n")

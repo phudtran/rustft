@@ -17,6 +17,6 @@ crate-type = ["cdylib"]
 [dependencies]
 # The point of these bindings is to measure the code in this repository. Pulling
 # rustft from crates.io instead would benchmark whatever was last published.
-rustft = { path = "../rustft", features = ["parallel"] }
+rustft = { path = "../rustft", features = ["parallel", "pocketfft"] }
 numpy = "0.29"
 pyo3 = { version = "0.29", features = ["extension-module"] }

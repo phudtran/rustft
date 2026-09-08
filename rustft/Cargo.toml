@@ -22,6 +22,10 @@ realfft = "3.5"
 rustfft = "6.2"
 transpose = "0.2"
 
+[build-dependencies]
+# Only used by the optional `pocketfft` feature; the build script exits early without it.
+cc = "1"
+
 [dev-dependencies]
 criterion = "0.5"
 
@@ -32,3 +36,7 @@ harness = false
 [features]
 # Fan the per-frame FFTs out across cores with rayon.
 parallel = ["dep:rayon"]
+# Swap rustfft for a vendored pocketfft, the FFT PyTorch itself uses on CPU. Makes the
+# output bit-identical to torch.stft / torch.istft, at the cost of a C++ toolchain at
+# build time. pocketfft is BSD-3-Clause; its notice is in the vendored header.
+pocketfft = []
