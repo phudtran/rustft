@@ -1,0 +1,15 @@
+[package]
+name = "conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "conformance"
+path = "src/main.rs"
+
+[dependencies]
+rustft = { path = "../rustft" }
+ndarray = "0.16.1"
+rustfft = "6.2.0"

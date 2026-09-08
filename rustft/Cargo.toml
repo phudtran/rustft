@@ -2,6 +2,7 @@
 name = "rustft"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description.workspace = true
 repository.workspace = true
 keywords.workspace = true
@@ -15,7 +16,19 @@ name = "rustft"
 
 
 [dependencies]
-log = "0.4.22"
-ndarray = { version = "0.16.1"}
-# ndarray = ">= 0.13, < 0.16"
-rustfft = "6.2.0"
+ndarray = "0.16.1"
+rayon = { version = "1", optional = true }
+realfft = "3.5"
+rustfft = "6.2"
+transpose = "0.2"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "stft"
+harness = false
+
+[features]
+# Fan the per-frame FFTs out across cores with rayon.
+parallel = ["dep:rayon"]

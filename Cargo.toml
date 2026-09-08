@@ -3,13 +3,25 @@ members = [
     "rustft",
     "benchmarks",
     "example",
+    "conformance",
+]
+# `benchmarks` is a Python extension module: it resolves the interpreter's symbols at
+# load time, so it links under `maturin develop` but not under a bare `cargo build`.
+# Keeping it out of the default set lets `cargo build`, `cargo test` and `cargo bench`
+# work from the repository root; see benchmarks/README.md to build it.
+default-members = [
+    "rustft",
+    "example",
+    "conformance",
 ]
 resolver = "2"
 
 [workspace.package]
-name = "rustft"
+# `name` is not workspace-inheritable; each member declares its own.
 version = "0.0.14"
 edition = "2021"
+# rayon 1.12 is the highest floor among the dependencies.
+rust-version = "1.80"
 license = "MIT OR Apache-2.0"
 description = "WIP. STFT and ISTFT in Rust matching PyTorch"
 readme = "README.md"
@@ -28,7 +40,7 @@ example = { path = "./example", package = "example"}
 panic = "abort"   # Strip expensive panic clean-up logic
 codegen-units = 1 # Compile crates one after another so the compiler can optimize better
 lto = true        # Enables link to optimizations
-opt-level = "z"   # Optimize for binary size
+opt-level = 3     # Optimize for speed; this is a numerics library
 strip = true      # Remove debug symbols
 rpath = true
 

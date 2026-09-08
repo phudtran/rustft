@@ -1,141 +1,110 @@
-import numpy as np
-import torch
-from rustft import rust_stft, rust_istft, rust_stft_roundtrip
+"""Compare rustft's STFT/ISTFT against PyTorch for accuracy and speed.
+
+Two things this deliberately does that the older version of this script did not:
+
+* The window is float64. `torch.hann_window` returns float32 by default, and mixing
+  that with a float64 signal puts ~1e-7 of error into *PyTorch's own* roundtrip. It
+  looks like a rustft bug and is not one.
+* The `Stft` object is built once, outside the timing loop, because `torch.stft`
+  likewise reuses a cached plan. Planning an FFT per call measures the planner.
+"""
+
 import time
 
-def generate_test_signal(num_channels, signal_length, sample_rate=44100):
-    t = np.linspace(0, signal_length / sample_rate, signal_length, endpoint=False)
-    frequencies = [440, 880, 1320]  # A4, A5, E6
-    signal = np.zeros((num_channels, signal_length))
+import numpy as np
+import torch
+from rustft import Stft
+
+TEST_CASES = [
+    # (channels, signal length, n_fft, hop length)
+    (2, 16384, 1024, 512),
+    (2, 261120, 6144, 1024),
+    (2, 65536, 4096, 2048),
+]
+
+
+def generate_test_signal(num_channels, signal_length, sample_rate=44100, rng=None):
+    rng = rng or np.random.default_rng(0)
+    t = np.arange(signal_length) / sample_rate
+    tone = sum(np.sin(2 * np.pi * f * t) for f in (440, 880, 1320))
+    signal = np.empty((num_channels, signal_length))
     for channel in range(num_channels):
-        channel_signal = np.zeros(signal_length)
-        for freq in frequencies:
-            channel_signal += np.sin(2 * np.pi * freq * t)
-        noise = np.random.normal(0, 0.1, signal_length)
-        channel_signal += noise
-        channel_signal = channel_signal / np.max(np.abs(channel_signal))
-        signal[channel] = channel_signal
+        noisy = tone + rng.normal(0, 0.1, signal_length)
+        signal[channel] = noisy / np.max(np.abs(noisy))
     return signal
 
-def compare_stft_istft(num_channels, signal_length, n_fft, hop_length, num_trials=10):
-    total_rust_diff = 0
-    total_pytorch_diff = 0
-    total_rust_stft_pytorch_istft_diff = 0
-    total_pytorch_stft_rust_istft_diff = 0
-    total_stft_diff = 0
 
-    total_rust_time = 0
-    total_pytorch_time = 0
-    total_rust_stft_time = 0
-    total_pytorch_istft_time = 0
-    total_pytorch_stft_time = 0
-    total_rust_istft_time = 0
+def timed(fn, *args):
+    start = time.perf_counter()
+    result = fn(*args)
+    return result, time.perf_counter() - start
 
-    window = torch.hann_window(window_length=n_fft, periodic=True)
+
+def compare(num_channels, signal_length, n_fft, hop_length, num_trials=10):
+    window = torch.hann_window(n_fft, periodic=True, dtype=torch.float64)
+    stft = Stft(n_fft, hop_length, "hann", True)
+    rng = np.random.default_rng(0)
+
+    totals = {k: 0.0 for k in (
+        "stft_diff", "istft_diff", "rust_roundtrip", "torch_roundtrip",
+        "rust_stft_torch_istft", "torch_stft_rust_istft",
+        "t_rust_stft", "t_rust_istft", "t_torch_stft", "t_torch_istft",
+    )}
 
     for _ in range(num_trials):
-        signal = generate_test_signal(num_channels, signal_length)
+        signal = generate_test_signal(num_channels, signal_length, rng=rng)
+        tensor = torch.from_numpy(signal)
 
-        # Rust STFT
-        start_time = time.time()
-        rust_stft_result = rust_stft(signal, n_fft, hop_length)
-        total_rust_stft_time += time.time() - start_time
+        rust_spec, dt = timed(stft.forward, signal)
+        totals["t_rust_stft"] += dt
+        torch_spec, dt = timed(
+            lambda: torch.stft(tensor, n_fft, hop_length, window=window,
+                               center=True, return_complex=True))
+        totals["t_torch_stft"] += dt
 
-        # PyTorch STFT
-        start_time = time.time()
-        pytorch_stft_result = torch.stft(
-            torch.from_numpy(signal),
-            n_fft, hop_length,
-            return_complex=True,
-            window=window,
-            center=True,
-        )
-        total_pytorch_stft_time += time.time() - start_time
+        rust_back, dt = timed(stft.inverse, rust_spec)
+        totals["t_rust_istft"] += dt
+        torch_back, dt = timed(
+            lambda: torch.istft(torch_spec, n_fft, hop_length, window=window, center=True))
+        totals["t_torch_istft"] += dt
 
-        # Compare STFT results
-        stft_diff = np.mean(np.abs(rust_stft_result - pytorch_stft_result.numpy()))
-        total_stft_diff += stft_diff
+        torch_spec = torch_spec.numpy()
+        torch_back = torch_back.numpy()
+        cross_rust = stft.inverse(torch_spec)
+        cross_torch = torch.istft(torch.from_numpy(rust_spec), n_fft, hop_length,
+                                  window=window, center=True).numpy()
 
-        # Rust STFT -> ISTFT
-        start_time = time.time()
-        rust_roundtrip = rust_stft_roundtrip(signal, n_fft, hop_length)
-        total_rust_time += time.time() - start_time
+        reference = signal[:, : rust_back.shape[1]]
+        totals["stft_diff"] += np.abs(rust_spec - torch_spec).max()
+        totals["istft_diff"] += np.abs(rust_back - torch_back).max()
+        totals["rust_roundtrip"] += np.abs(reference - rust_back).max()
+        totals["torch_roundtrip"] += np.abs(reference - torch_back).max()
+        totals["rust_stft_torch_istft"] += np.abs(reference - cross_torch).max()
+        totals["torch_stft_rust_istft"] += np.abs(reference - cross_rust).max()
 
-        # PyTorch STFT -> ISTFT
-        start_time = time.time()
-        pytorch_roundtrip = torch.istft(
-            pytorch_stft_result,
-            n_fft,
-            hop_length,
-            window=window,
-            center=True
-        ).numpy()
-        total_pytorch_istft_time += time.time() - start_time
+    avg = {k: v / num_trials for k, v in totals.items()}
+    print(f"  max |rustft - PyTorch|, STFT           : {avg['stft_diff']:.3e}")
+    print(f"  max |rustft - PyTorch|, ISTFT          : {avg['istft_diff']:.3e}")
+    print(f"  rustft roundtrip error                 : {avg['rust_roundtrip']:.3e}")
+    print(f"  PyTorch roundtrip error                : {avg['torch_roundtrip']:.3e}")
+    print(f"  rustft STFT -> PyTorch ISTFT           : {avg['rust_stft_torch_istft']:.3e}")
+    print(f"  PyTorch STFT -> rustft ISTFT           : {avg['torch_stft_rust_istft']:.3e}")
+    print()
+    rust_total = avg["t_rust_stft"] + avg["t_rust_istft"]
+    torch_total = avg["t_torch_stft"] + avg["t_torch_istft"]
+    print(f"  {'':<22}{'rustft':>12}{'PyTorch':>12}{'ratio':>10}")
+    for label, r, t in (
+        ("STFT", avg["t_rust_stft"], avg["t_torch_stft"]),
+        ("ISTFT", avg["t_rust_istft"], avg["t_torch_istft"]),
+        ("STFT + ISTFT", rust_total, torch_total),
+    ):
+        print(f"  {label:<22}{r * 1e3:>10.3f}ms{t * 1e3:>10.3f}ms{t / r:>9.2f}x")
 
-        total_pytorch_time += total_pytorch_stft_time + total_pytorch_istft_time
-
-        # Rust STFT -> PyTorch ISTFT
-        start_time = time.time()
-        pytorch_istft_rust_stft = torch.istft(
-            torch.from_numpy(rust_stft_result),
-            n_fft,
-            hop_length,
-            window=window,
-            center=True
-        ).numpy()
-        total_pytorch_istft_time += time.time() - start_time
-
-        # PyTorch STFT -> Rust ISTFT
-        start_time = time.time()
-        rust_istft_pytorch_stft = rust_istft(
-            pytorch_stft_result.numpy(),
-            n_fft,
-            hop_length)
-        total_rust_istft_time += time.time() - start_time
-
-        # Compare results to original signal
-        rust_diff = np.mean(np.abs(signal - rust_roundtrip))
-        pytorch_diff = np.mean(np.abs(signal - pytorch_roundtrip))
-        rust_stft_pytorch_istft_diff = np.mean(np.abs(signal - pytorch_istft_rust_stft))
-        pytorch_stft_rust_istft_diff = np.mean(np.abs(signal - rust_istft_pytorch_stft))
-
-        total_rust_diff += rust_diff
-        total_pytorch_diff += pytorch_diff
-        total_rust_stft_pytorch_istft_diff += rust_stft_pytorch_istft_diff
-        total_pytorch_stft_rust_istft_diff += pytorch_stft_rust_istft_diff
-
-    avg_rust_diff = total_rust_diff / num_trials
-    avg_pytorch_diff = total_pytorch_diff / num_trials
-    avg_rust_stft_pytorch_istft_diff = total_rust_stft_pytorch_istft_diff / num_trials
-    avg_pytorch_stft_rust_istft_diff = total_pytorch_stft_rust_istft_diff / num_trials
-    avg_stft_diff = total_stft_diff / num_trials
-
-    avg_rust_time = total_rust_time / num_trials
-    avg_pytorch_time = total_pytorch_time / num_trials
-    avg_rust_stft_time = total_rust_stft_time / num_trials
-    avg_pytorch_istft_time = total_pytorch_istft_time / num_trials
-    avg_pytorch_stft_time = total_pytorch_stft_time / num_trials
-    avg_rust_istft_time = total_rust_istft_time / num_trials
-
-    print(f"Average STFT difference (Rust vs PyTorch): {avg_stft_diff}")
-    print(f"Average Rust roundtrip error: {avg_rust_diff}")
-    print(f"Average PyTorch roundtrip error: {avg_pytorch_diff}")
-    print(f"Average roundtrip error (Rust STFT -> PyTorch ISTFT): {avg_rust_stft_pytorch_istft_diff}")
-    print(f"Average roundtrip error (PyTorch STFT -> Rust ISTFT): {avg_pytorch_stft_rust_istft_diff}")
-    print(f"\nAverage run times:\n")
-    print(f"Rust STFT + ISTFT: {avg_rust_time:.6f} seconds")
-    print(f"PyTorch STFT + ISTFT: {avg_pytorch_time:.6f} seconds")
-    print(f"Rust STFT: {avg_rust_stft_time:.6f} seconds")
-    print(f"PyTorch ISTFT: {avg_pytorch_istft_time:.6f} seconds")
-    print(f"PyTorch STFT: {avg_pytorch_stft_time:.6f} seconds")
-    print(f"Rust ISTFT: {avg_rust_istft_time:.6f} seconds")
 
 if __name__ == "__main__":
-    test_cases = [
-        (2, 16384, 1024, 512),
-        (2, 261120, 6144, 1024),
-        (2, 65536, 4096, 2048)
-    ]
-    for num_channels, signal_length, n_fft, hop_length in test_cases:
-        print(f"\nTesting with: {num_channels} channels, signal length {signal_length}, n_fft {n_fft}, hop_length {hop_length}")
-        compare_stft_istft(num_channels, signal_length, n_fft, hop_length)
+    print(f"torch {torch.__version__}, {torch.get_num_threads()} threads\n")
+    for num_channels, signal_length, n_fft, hop_length in TEST_CASES:
+        print(f"{num_channels} channels, {signal_length} samples, "
+              f"n_fft {n_fft}, hop {hop_length}")
+        compare(num_channels, signal_length, n_fft, hop_length)
+        print()

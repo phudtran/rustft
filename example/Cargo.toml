@@ -8,9 +8,9 @@ keywords.workspace = true
 categories.workspace = true
 license.workspace = true
 readme = "README.md"
+publish = false
 
 [dependencies]
 rustft = { path = "../rustft", package = "rustft" }
-ndarray = { version = "0.16.1"}
-# ndarray = ">= 0.13, < 0.16"
+ndarray = "0.16.1"
 

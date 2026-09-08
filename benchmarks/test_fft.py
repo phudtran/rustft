@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from rustft import rust_fft, rust_ifft, rust_fft_roundtrip_test
+from rustft import rust_fft, rust_ifft, rust_fft_roundtrip
 
 def generate_test_signal(size):
     return np.random.random(size)
@@ -16,7 +16,7 @@ def compare_fft_ifft_roundtrip(signal_size, num_trials=100):
         signal = generate_test_signal(signal_size)
 
         # Rust roundtrip
-        rust_roundtrip = rust_fft_roundtrip_test(signal)
+        rust_roundtrip = rust_fft_roundtrip(signal)
 
         # PyTorch roundtrip
         pytorch_fft_result = torch.fft.fft(torch.from_numpy(signal))
