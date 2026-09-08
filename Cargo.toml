@@ -18,12 +18,14 @@ resolver = "2"
 
 [workspace.package]
 # `name` is not workspace-inheritable; each member declares its own.
-version = "0.0.14"
+version = "0.1.0"
 edition = "2021"
 # rayon 1.12 is the highest floor among the dependencies.
 rust-version = "1.80"
-license = "MIT OR Apache-2.0"
-description = "WIP. STFT and ISTFT in Rust matching PyTorch"
+# The crate's own code is MIT OR Apache-2.0. It also ships a vendored pocketfft
+# (BSD-3-Clause) and a port of SLEEF's cosf_u1 (BSL-1.0).
+license = "(MIT OR Apache-2.0) AND BSD-3-Clause AND BSL-1.0"
+description = "STFT and ISTFT matching PyTorch bit for bit"
 readme = "README.md"
 homepage = "https://github.com/phudtran/rustft"
 repository = "https://github.com/phudtran/rustft"

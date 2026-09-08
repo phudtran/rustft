@@ -16,6 +16,12 @@
 //! any of them breaks the bit-for-bit match with PyTorch, however harmless the change
 //! looks. The fused steps are written as explicit `mul_add` calls, so the rounding does
 //! not depend on the target or the optimisation level.
+//!
+//! Ported from SLEEF (`src/libm/sleefsimdsp.c`, `src/common/df.h`):
+//!
+//! > Copyright Naoki Shibata and contributors 2010 - 2025.
+//! > Distributed under the Boost Software License, Version 1.0.
+//! > <https://www.boost.org/LICENSE_1_0.txt>
 
 // Several constants below carry more decimal digits than an f32 needs. They are kept as
 // written: shortening them to the shortest round-tripping form is equivalent, but makes

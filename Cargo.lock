@@ -31,7 +31,7 @@ checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
 name = "benchmarks"
-version = "0.0.14"
+version = "0.1.0"
 dependencies = [
  "numpy",
  "pyo3",
@@ -120,7 +120,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "conformance"
-version = "0.0.14"
+version = "0.1.0"
 dependencies = [
  "ndarray",
  "rustfft",
@@ -202,7 +202,7 @@ checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 
 [[package]]
 name = "example"
-version = "0.0.14"
+version = "0.1.0"
 dependencies = [
  "ndarray",
  "rustft",
@@ -609,7 +609,7 @@ dependencies = [
 
 [[package]]
 name = "rustft"
-version = "0.0.14"
+version = "0.1.0"
 dependencies = [
  "cc",
  "criterion",
